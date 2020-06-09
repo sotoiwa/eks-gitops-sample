@@ -24,3 +24,12 @@ metadata:
 spec:
   source:
     path: backend/overlays/production
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alb-ingress-controller
+  namespace: argocd
+spec:
+  source:
+    path: alb-ingress-controller/overlays/production

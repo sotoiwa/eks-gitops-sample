@@ -26,6 +26,8 @@ EKSで以下のスタックを使ったGitOps構成のサンプル構成を作�
 ## 参考リンク
 
 - [GitOpsで絶対に避けて通れないブランチ戦略](https://amaya382.hatenablog.jp/entry/2019/12/02/192159)
+- [Argo CDによる継続的デリバリーのベストプラクティスとその実装](https://blog.cybozu.io/entry/2019/11/21/100000)
+- [https://github.com/cybozu-go/neco-apps](https://github.com/cybozu-go/neco-apps)
 
 ## パイプラインの構築
 
@@ -589,11 +591,6 @@ argocd repo list
 
 ### Argo CDアプリケーションの作成
 
-yamlのリポジトリの構成についてはこれらが参考になりそう。
-
-- [Argo CDによる継続的デリバリーのベストプラクティスとその実装](https://blog.cybozu.io/entry/2019/11/21/100000)
-- [https://github.com/cybozu-go/neco-apps](https://github.com/cybozu-go/neco-apps)
-
 今回CodeCommitリポジトリはそれぞれ以下のブランチ戦略をとる。
 
 |リポジトリ名|ブランチ戦略|
@@ -626,12 +623,6 @@ argocd app create apps \
 
 ```sh
 argocd app list
-```
-
-Namespaceが作成される前にSyncして失敗した場合は手動Syncする。
-
-```sh
-argocd app sync <app名>
 ```
 
 ### 確認
