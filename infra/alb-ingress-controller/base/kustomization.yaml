@@ -1,0 +1,3 @@
+resources:
+- alb-ingress-controller.yaml
+- rbac-role.yaml

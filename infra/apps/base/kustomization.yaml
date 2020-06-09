@@ -1,0 +1,5 @@
+resources:
+- namespaces.yaml
+- frontend.yaml
+- backend.yaml
+- alb-ingress-controller.yaml

@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: frontend
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        image: XXXX_AWS_ACCOUNT_ID_XXXX.dkr.ecr.ap-northeast-1.amazonaws.com/frontend:253f292

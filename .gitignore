@@ -1,0 +1,10 @@
+.DS_Store
+.vscode/
+.env/
+venv/
+.venv
+__pycache__/
+cdk.out/
+id_rsa*
+trust.json
+iam-policy.json

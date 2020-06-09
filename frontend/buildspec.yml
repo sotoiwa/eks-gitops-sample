@@ -1,0 +1,63 @@
+version: 0.2
+
+env:
+  variables:
+    APP_NAME: frontend
+    ECR_REPOSITORY_NAME: frontend
+    INFRA_CODECOMMIT_REPOSITORY_NAME: infra
+  git-credential-helper: yes
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+      - aws ecr get-login-password | docker login --username AWS --password-stdin https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+      - ECR_REPOSITORY_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}
+      - COMMIT_HASH=$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - |
+        if [ "${PIPELINE_BRANCH_NAME}" = "master" ]; then
+          TARGET_ENV="staging"
+        else
+          TARGET_ENV=${PIPELINE_BRANCH_NAME}
+        fi
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t ${ECR_REPOSITORY_URI}:latest .
+      - docker tag ${ECR_REPOSITORY_URI}:latest ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push ${ECR_REPOSITORY_URI}:latest
+      - docker push ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+      - echo Creating Pull Request...
+      - INFRA_CODECOMMIT_REPOSITORY_URI=https://git-codecommit.${AWS_DEFAULT_REGION}.amazonaws.com/v1/repos/${INFRA_CODECOMMIT_REPOSITORY_NAME}
+      - git config --global user.email "ci-build@example.com"
+      - git config --global user.name "ci-build"
+      - git clone ${INFRA_CODECOMMIT_REPOSITORY_URI}
+      - cd ${INFRA_CODECOMMIT_REPOSITORY_NAME}
+      - git checkout master
+      - NEW_BRANCH_NAME="ci-build/${TARGET_ENV}/${APP_NAME}/${COMMIT_HASH}"
+      - git checkout -b ${NEW_BRANCH_NAME}
+      - TARGET_FILE=${APP_NAME}/overlays/${TARGET_ENV}/image.yaml
+      - |
+        sed -i -e "s/image: \(.*\/${ECR_REPOSITORY_NAME}\):.\+\$/image: \1:${COMMIT_HASH}/" ${TARGET_FILE}
+      - git add .
+      - COMMIT_MSG="Replace ${TARGET_ENV} ${ECR_REPOSITORY_NAME} image tag to ${COMMIT_HASH}."
+      - git commit -m "${COMMIT_MSG}"
+      - git push origin ${NEW_BRANCH_NAME}
+      - PR_TITLE="[${TARGET_ENV^^} DEPLOY REQUEST] ${NEW_BRANCH_NAME}"
+      - PR_MSG="Replace ${TARGET_ENV} ${ECR_REPOSITORY_NAME} image tag to ${COMMIT_HASH}."
+      - |
+        aws codecommit create-pull-request \
+          --title "${PR_TITLE}" \
+          --description "${PR_MSG}" \
+          --targets "repositoryName=${INFRA_CODECOMMIT_REPOSITORY_NAME},sourceReference=${NEW_BRANCH_NAME},destinationReference=master"

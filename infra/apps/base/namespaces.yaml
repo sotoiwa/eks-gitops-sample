@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: namespaces
+  namespace: argocd
+spec:
+  destination:
+    namespace: namespaces
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: namespaces/overlays/staging
+    repoURL: ssh://XXXX_SSH_KEY_ID_XXXX@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra
+  syncPolicy:
+    automated: {}

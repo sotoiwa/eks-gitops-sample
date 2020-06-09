@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>メッセージサンプル</title>
+</head>
+<body>
+<div>
+    <h5>Messages</h5>
+    <ul>
+        {% for item in items %}
+        <li>{{ item.message }}</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<div>
+    <form method="post">
+        <h5>Add message</h5>
+
+        {{ form.hidden_tag() }}
+        {{ form.message(size=50, placeholder='your message') }}<br>
+        {{ form.submit() }}
+    </form>
+</div>
+</body>
+</html>

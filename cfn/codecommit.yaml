@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  FrontendCodeCommit:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: frontend
+  BackendCodeCommit:
+    Type: AWS::CodeCommit::Repository
+    DeletionPolicy: Retain
+    Properties:
+      RepositoryName: backend
+  InfraCodeCommit:
+    Type: AWS::CodeCommit::Repository
+    DeletionPolicy: Retain
+    Properties:
+      RepositoryName: infra

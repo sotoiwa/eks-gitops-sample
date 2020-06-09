@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+  namespace: backend
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::XXXX_AWS_ACCOUNT_ID_XXXX:role/backend-staging

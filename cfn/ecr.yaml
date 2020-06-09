@@ -1,0 +1,11 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  FrontEndECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: frontend
+  BackendECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: backend

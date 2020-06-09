@@ -1,0 +1,7 @@
+resources:
+- ../../base
+
+patches:
+- env.yaml
+- image.yaml
+- sa.yaml
