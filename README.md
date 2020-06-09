@@ -314,7 +314,7 @@ aws codepipeline start-pipeline-execution --name frontend-master-pipeline
 
 ## stagingクラスターの作成
 
-今回、アプリケーションのmasterブランチ＝stagingクラスター、prodブランチ＝productionクラスターという構成にする
+今回、アプリケーションのmasterブランチ＝stagingクラスター、productionブランチ＝productionクラスターという構成にする。
 
 ### クラスターの作成
 
@@ -530,7 +530,7 @@ kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-今回はポートフォワードを前提としてLoad Balancerは設定しない。ポートフォワードする。
+今回はポートフォワードを前提としてLoad Balancerは作成しない。ポートフォワードする。
 
 ```sh
 kubectl port-forward svc/argocd-server -n argocd 8080:443
@@ -595,8 +595,8 @@ argocd repo list
 
 |リポジトリ名|ブランチ戦略|
 |---|---|
-|frontend|masterブランチをstaging環境、productionブランチにproduction環境にデプロイ|
-|backend|masterブランチをstaging環境、productionブランチにproduction環境にデプロイ|
+|frontend|masterブランチをstaging環境、productionブランチをproduction環境にデプロイ|
+|backend|masterブランチをstaging環境、productionブランチをproduction環境にデプロイ|
 |infra|masterブランチのみを使用し、各環境の差分のファイルはディレクトリ毎に保持|
 
 また、App of Apps構成とし、infraリポジトリのappディレクトリにArgo CDのApplicationリソースの定義を格納する。
@@ -657,7 +657,7 @@ URLを確認する。
 ```sh
 $ kubectl get ingress -n frontend
 NAME       HOSTS   ADDRESS                                                                       PORTS   AGE
-frontend   *       bd528925-frontend-frontend-023f-1793275380.ap-northeast-1.elb.amazonaws.com   80      4m37s
+frontend   *       XXXXXXXX-frontend-frontend-XXXX-XXXXXXXXXX.ap-northeast-1.elb.amazonaws.com   80      4m37s
 ```
 
 URLにアクセスしてアプリケーションが動作することを確認する。
