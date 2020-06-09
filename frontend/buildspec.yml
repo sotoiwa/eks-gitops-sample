@@ -44,7 +44,7 @@ phases:
       - git config --global user.name "ci-build"
       - git clone ${INFRA_CODECOMMIT_REPOSITORY_URI}
       - cd ${INFRA_CODECOMMIT_REPOSITORY_NAME}
-      - git checkout master
+      - git branch -a
       - NEW_BRANCH_NAME="ci-build/${TARGET_ENV}/${APP_NAME}/${COMMIT_HASH}"
       - git checkout -b ${NEW_BRANCH_NAME}
       - TARGET_FILE=${APP_NAME}/overlays/${TARGET_ENV}/image.yaml
@@ -53,7 +53,7 @@ phases:
       - git add .
       - COMMIT_MSG="Replace ${TARGET_ENV} ${ECR_REPOSITORY_NAME} image tag to ${COMMIT_HASH}."
       - git commit -m "${COMMIT_MSG}"
-      - git push origin ${NEW_BRANCH_NAME}
+      - git push -u origin ${NEW_BRANCH_NAME}
       - PR_TITLE="[${TARGET_ENV^^} DEPLOY REQUEST] ${NEW_BRANCH_NAME}"
       - PR_MSG="Replace ${TARGET_ENV} ${ECR_REPOSITORY_NAME} image tag to ${COMMIT_HASH}."
       - |

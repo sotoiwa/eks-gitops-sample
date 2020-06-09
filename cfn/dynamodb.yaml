@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ClusterName:
+    Description: EKS cluster name
+    Type: String
+  NamespaceName:
+    Description: Namespace name
+    Type: String
+  ServiceAccountName:
+    Description: Service Account name
+    Type: String
+  OidcProvider:
+    Description: OIDC Provider
+    Type: String
+
+Resources:
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub messages-${ClusterName}
+      AttributeDefinitions:
+        - AttributeName: uuid
+          AttributeType: S
+      KeySchema:
+        - AttributeName: uuid
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub backend-${ClusterName}
+      AssumeRolePolicyDocument:
+        !Sub |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/${OidcProvider}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringEquals": {
+                    "${OidcProvider}:sub": "system:serviceaccount:${NamespaceName}:${ServiceAccountName}"
+                  }
+                }
+              }
+            ]
+          }
+      Policies:
+        - PolicyName: !Sub backend-${ClusterName}-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:List*
+                  - dynamodb:DescribeReservedCapacity*
+                  - dynamodb:DescribeLimits
+                  - dynamodb:DescribeTimeToLive
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchGet*
+                  - dynamodb:DescribeStream
+                  - dynamodb:DescribeTable
+                  - dynamodb:Get*
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWrite*
+                  - dynamodb:CreateTable
+                  - dynamodb:Delete*
+                  - dynamodb:Update*
+                  - dynamodb:PutItem
+                Resource:
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MessagesTable}
