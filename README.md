@@ -318,12 +318,15 @@ aws codepipeline start-pipeline-execution --name frontend-master-pipeline
 
 ### クラスターの作成
 
-stagingクラスターを作成する。
+stagingクラスターを作成する。クラスター定義ファイルでキーペアの名前を置き換えてから、以下のコマンドを実行する。
+
+        sed -i -e "s/image: \(.*\/${ECR_REPOSITORY_NAME}\):.\+\$/image: \1:${COMMIT_HASH}/" ${TARGET_FILE}
 
 ```sh
 cluster_name="staging"
 key_pair_name="hogehoge"
-eksctl create cluster --name=${cluster_name} --nodes=3 --managed --ssh-access --ssh-public-key=${key_pair_name}
+sed -i "" -e "s/XXXX_KEY_PAIR_NAME_XXXX/${key_pair_name}/" ${cluster_name}.yaml
+eksctl create cluster -f ${cluster_name}.yaml
 ```
 
 ### IRSA
@@ -623,6 +626,12 @@ argocd app create apps \
 
 ```sh
 argocd app list
+```
+
+Syncが上手くいかなかった場合は手動Syncを試す。
+
+```sh
+argocd app sync <App名>
 ```
 
 ### 確認
