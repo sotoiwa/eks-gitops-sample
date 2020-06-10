@@ -33,9 +33,21 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 
 GitOpsでCIとCDは分離するので、CIを行うパイプラインを最初に作成する。
 
-### Argo CD用のCodeCommitユーザーの作成
+### Argo CD用のIAMユーザーの作成
 
-Argo CDではパスワードによるhttps接続か鍵によるssh接続が可能。
+CodeCommitへのアクセスにはいくつかの選択肢がある。
+
+- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
+  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
+- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
+  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
+- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
+  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
+  - git clone codecommit::ap-northeast-1://your-repo-name
+- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
+  - AWS CLIに含まれている認証情報ヘルパーを使う方法
+
+Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
 
 - [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
 - [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
@@ -116,18 +128,6 @@ backend_codecommit_ssh=$(aws codecommit get-repository --repository-name backend
 infra_codecommit_http=$(aws codecommit get-repository --repository-name infra --query 'repositoryMetadata.cloneUrlHttp' --output text); echo ${infra_codecommit_http}
 infra_codecommit_ssh=$(aws codecommit get-repository --repository-name infra --query 'repositoryMetadata.cloneUrlSsh' --output text); echo ${infra_codecommit_ssh}
 ```
-
-CodeCommitへのアクセスにはいくつかの選択肢がある。
-
-- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
-  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
-- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
-  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
-- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
-  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
-  - git clone codecommit::ap-northeast-1://your-repo-name
-- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
-  - AWS CLIに含まれている認証情報ヘルパーを使う方法
 
 ローカルからのpushについては、CLI認証情報ヘルパーを使うことにして以下を設定する。
 
