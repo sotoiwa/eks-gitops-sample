@@ -647,7 +647,8 @@ argocd app create apps \
   --path apps/overlays/${cluster_name} \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace argocd \
-  --sync-policy automated
+  --sync-policy automated \
+  --auto-prune
 ```
 
 確認する。
