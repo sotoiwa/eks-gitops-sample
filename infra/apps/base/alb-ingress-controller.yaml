@@ -5,8 +5,8 @@ metadata:
   namespace: argocd
 spec:
   destination:
-    namespace: kube-system
     server: https://kubernetes.default.svc
+    namespace: kube-system
   project: default
   source:
     path: alb-ingress-controller/overlays/staging

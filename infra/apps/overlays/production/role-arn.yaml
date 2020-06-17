@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+spec:
+  source:
+    helm:
+      parameters:
+      - name: env.AWS_DEFAULT_REGION
+        value: ap-northeast-1
+      - name: env.AWS_REGION
+        value: ap-northeast-1
+      - name: fullnameOverride
+        value: external-secrets
+      - name: serviceAccount.name
+        value: external-secrets
+      - name: serviceAccount.annotations.eks\.amazonaws\.com/role-arn
+        value: arn:aws:iam::XXXX_AWS_ACCOUNT_ID_XXXX:role/external-secrets-production
+      - name: securityContext.fsGroup
+        value: "65534"

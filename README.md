@@ -522,6 +522,34 @@ aws iam attach-role-policy \
   --policy-arn ${policy_arn}
 ```
 
+#### Kubernetes External Secrets
+
+Kubernetes External Secretsが使用するIAMロールを作成する。
+
+##### Cloudformation
+
+IAMロールを作成する。
+
+```sh
+oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+aws cloudformation deploy \
+  --stack-name gitops-external-secrets-iam-${cluster_name}-stack \
+  --template-file cfn/external-secrets-iam.yaml \
+  --parameter-overrides ClusterName=${cluster_name} NamespaceName=external-secrets ServiceAccountName=external-secrets OidcProvider=${oidc_provider} \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+##### シークレットの作成
+
+シークレットを作成する。
+
+```sh
+aws secretsmanager create-secret \
+  --region ap-northeast-1 \
+  --name mydb/${cluster_name} \
+  --secret-string '{"username":"admin","password":"1234"}'
+```
+
 ### Argo CDのデプロイ
 
 stagingクラスターにArgo CDをデプロイする。

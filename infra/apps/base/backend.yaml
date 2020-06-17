@@ -5,8 +5,8 @@ metadata:
   namespace: argocd
 spec:
   destination:
-    namespace: backend
     server: https://kubernetes.default.svc
+    namespace: backend
   project: default
   source:
     path: backend/overlays/staging

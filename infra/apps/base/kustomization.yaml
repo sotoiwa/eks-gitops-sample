@@ -3,3 +3,4 @@ resources:
 - frontend.yaml
 - backend.yaml
 - alb-ingress-controller.yaml
+- external-secrets.yaml

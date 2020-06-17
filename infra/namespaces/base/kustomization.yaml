@@ -1,3 +1,4 @@
 resources:
-- frontend-namespace.yaml
-- backend-namespace.yaml
+- frontend-ns.yaml
+- backend-ns.yaml
+- external-secrets-ns.yaml
