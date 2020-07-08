@@ -320,8 +320,6 @@ aws codepipeline start-pipeline-execution --name frontend-master-pipeline
 
 stagingクラスターを作成する。クラスター定義ファイルでキーペアの名前を置き換えてから、以下のコマンドを実行する。
 
-        sed -i -e "s/image: \(.*\/${ECR_REPOSITORY_NAME}\):.\+\$/image: \1:${COMMIT_HASH}/" ${TARGET_FILE}
-
 ```sh
 cluster_name="staging"
 key_pair_name="hogehoge"
