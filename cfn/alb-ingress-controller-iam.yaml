@@ -15,7 +15,7 @@ Parameters:
     Type: String
 
 Resources:
-  BackendRole:
+  ALBIngressControllerRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub alb-ingress-controller-${ClusterName}
