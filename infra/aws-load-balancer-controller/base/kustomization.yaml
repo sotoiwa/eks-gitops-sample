@@ -1,0 +1,2 @@
+resources:
+- aws-load-balancer-controller.yaml

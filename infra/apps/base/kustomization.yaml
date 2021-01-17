@@ -2,5 +2,6 @@ resources:
 - namespaces.yaml
 - frontend.yaml
 - backend.yaml
-- alb-ingress-controller.yaml
+- aws-load-balancer-controller.yaml
 - external-secrets.yaml
+- cert-manager.yaml

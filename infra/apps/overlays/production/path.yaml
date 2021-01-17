@@ -28,8 +28,17 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: alb-ingress-controller
+  name: aws-load-balancer-controller
   namespace: argocd
 spec:
   source:
-    path: alb-ingress-controller/overlays/production
+    path: aws-load-balancer-controller/overlays/production
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  source:
+    path: cert-manager/overlays/staging

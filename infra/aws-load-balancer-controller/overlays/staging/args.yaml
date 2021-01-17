@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: alb-ingress-controller
+  name: aws-load-balancer-controller
   namespace: kube-system
 spec:
   template:
     spec:
       containers:
-      - name: alb-ingress-controller
+      - name: controller
         args:
         - --ingress-class=alb
-        - --cluster-name=production
+        - --cluster-name=staging

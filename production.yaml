@@ -18,7 +18,7 @@ managedNodeGroups:
     desiredCapacity: 2
     ssh:
       allow: true
-      publicKeyName: XXXX_KEY_PAIR_NAME_XXXX
+      publicKeyName: default
     privateNetworking: true
 
 cloudWatch:

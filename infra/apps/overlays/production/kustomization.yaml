@@ -3,4 +3,4 @@ resources:
 
 patches:
 - path.yaml
-- role-arn.yaml
+- helm.yaml

@@ -17,11 +17,14 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 
 |コンポーネント|バージョン|
 |---|---|
-|eksctl|0.21.0|
-|Kubernetes バージョン|1.16|
-|プラットフォームのバージョン|eks.1|
-|Argo CD|v1.5.6|
-|Argo CD CLI|v1.5.6|
+|eksctl|0.36.0|
+|Kubernetes バージョン|1.18|
+|プラットフォームのバージョン|eks.3|
+|Argo CD|v1.8.2|
+|Argo CD CLI|v1.8.2|
+|AWS Load Balancer Controller|v2.1|
+|Kubernetes External Secrets|6.1|
+
 
 ## 参考リンク
 
@@ -32,7 +35,6 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 ## パイプラインの構築
 
 GitOpsでCIとCDは分離するので、CIを行うパイプラインを最初に作成する。
-
 ### Argo CD用のIAMユーザーの作成
 
 CodeCommitへのアクセスにはいくつかの選択肢がある。
@@ -249,8 +251,8 @@ aws cloudformation deploy \
   --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket}
 ```
 
-CodeBuildプロジェクトを作成する。こちらアプリケーション毎に作成し、環境では共有する。
-環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境変数を渡すようにしている。
+CodeBuildプロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり2つ作成する。」
+プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境を環境変数で渡すようにしている。
 
 ```sh
 aws cloudformation deploy \
@@ -268,7 +270,7 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-CodePipelineを作成する。こちらはアプリケーション毎かつ環境毎に作成する。
+CodePipelineを作成する。パイプラインはアプリケーション毎かつ環境毎に作成する。つまり4つ作成する。
 
 ```sh
 aws cloudformation deploy \
@@ -306,7 +308,7 @@ aws cloudformation deploy \
 
 マネジメントコンソールからパイプラインの状態を確認し、パイプラインが成功していればinfraリポジトリにはプルリクエストが作成されているはずなのでマージする。
 
-ビルドパイプラインを手動実行する場合は以下のコマンドで実行できるが、同じコミットから作成されたCodeBuildによって作成されたブランチがあると失敗するのでブランチを削除してから実施する。
+ビルドパイプラインを手動実行する場合は以下のコマンドで実行できるが、同じコミットからCodeBuildによって作成された別のブランチがinfraリポジトリにあると失敗するのでブランチを削除してから実施する。
 
 ```sh
 aws codepipeline start-pipeline-execution --name frontend-master-pipeline
@@ -322,22 +324,24 @@ stagingクラスターを作成する。クラスター定義ファイルでキ�
 
 ```sh
 cluster_name="staging"
-key_pair_name="hogehoge"
+key_pair_name="default"
 sed -i "" -e "s/XXXX_KEY_PAIR_NAME_XXXX/${key_pair_name}/" ${cluster_name}.yaml
 eksctl create cluster -f ${cluster_name}.yaml
 ```
 
 ### IRSA
 
-いくつかのPodはIAMロールが必要なため、IAM Roles for Service Accountを設定する。
-IAM Roles for Service Account関連の操作にeksctlを使わない場合のやり方は以下にまとまっている。
+いくつかのPodはIAMロールが必要なため、IAM Roles for Service Accounts(IRSA)を設定する。
+
+IRSA関連の操作にeksctlを使ってもよいのだが、ロール名が自動生成となりわかりにくいのと、その名前をKubernetesマニフェストに反映する必要がある。
+今回はなるべく使わないことにする。eksctlを使わない場合のやり方は以下にまとまっている。
 
 - [Kubernetes サービスアカウントに対するきめ細やかな IAM ロール割り当ての紹介](https://aws.amazon.com/jp/blogs/news/introducing-fine-grained-iam-roles-service-accounts/)
 - [サービスアカウントの IAM ロールとポリシーの作成](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-service-account-iam-policy-and-role.html)
 
 #### OICDプロバイダー
 
-OICDプロバイダーはK8sリソースを作っているわけではないので、eksctlで作成する。
+OICDプロバイダーはKubernetesリソースを作っているわけではないので、eksctlで作成する。この設定はクラスターの設定ファイル内で設定することも可能。
 
 ```sh
 eksctl utils associate-iam-oidc-provider \
@@ -351,13 +355,17 @@ eksctl utils associate-iam-oidc-provider \
 
 ##### Cloudformation
 
-テーブルとIAMロールを作成する。
+テーブルとIAMロールを作成する。ServiceAccountのマニフェストではアノテーションでこのIAMロールを指定し、DeploymentのマニフェストではServiceAccountを指定する。
 
 ```sh
 oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
 aws cloudformation deploy \
   --stack-name gitops-dynamodb-${cluster_name}-stack \
   --template-file cfn/dynamodb.yaml \
+  --parameter-overrides ClusterName=${cluster_name}
+aws cloudformation deploy \
+  --stack-name gitops-backend-iam-${cluster_name}-stack \
+  --template-file cfn/backend-iam.yaml \
   --parameter-overrides ClusterName=${cluster_name} NamespaceName=backend ServiceAccountName=backend OidcProvider=${oidc_provider} \
   --capabilities CAPABILITY_NAMED_IAM
 ```
@@ -454,11 +462,9 @@ aws iam attach-role-policy \
   --policy-arn ${policy_arn}
 ```
 
-ServiceAccountのマニフェストではアノテーションでこのIAMロールを指定し、DeploymentのマニフェストではServiceAccountを指定する。
+#### AWS Load Balancer Controller
 
-#### ALB Ingress Controller
-
-ALB Ingress Controllerが使用するIAMロールを作成する。
+[AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)が使用するIAMロールを作成する。
 
 ##### Cloudformation
 
@@ -467,9 +473,9 @@ IAMロールを作成する。
 ```sh
 oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
 aws cloudformation deploy \
-  --stack-name gitops-alb-ingress-controller-iam-${cluster_name}-stack \
-  --template-file cfn/alb-ingress-controller-iam.yaml \
-  --parameter-overrides ClusterName=${cluster_name} NamespaceName=kube-system ServiceAccountName=alb-ingress-controller OidcProvider=${oidc_provider} \
+  --stack-name gitops-aws-load-balancer-controller-iam-${cluster_name}-stack \
+  --template-file cfn/aws-load-balancer-controller-iam.yaml \
+  --parameter-overrides ClusterName=${cluster_name} NamespaceName=kube-system ServiceAccountName=aws-load-balancer-controller OidcProvider=${oidc_provider} \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -478,19 +484,19 @@ aws cloudformation deploy \
 IAMポリシーを作成する。共通のものを使用する。
 
 ```sh
-wget https://kubernetes-sigs.github.io/aws-alb-ingress-controller/examples/iam-policy.json
+curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.1.0/docs/install/iam_policy.json
 aws iam create-policy \
-  --policy-name ALBIngressControllerIAMPolicy \
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
   --policy-document file://iam-policy.json
-policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`ALBIngressControllerIAMPolicy`].{ARN:Arn}' --output text)
+policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSLoadBalancerControllerIAMPolicy`].{ARN:Arn}' --output text)
 ```
 
 IAMロールを作成する。
 
 ```sh
-role_name="alb-ingress-controller-${cluster_name}"
+role_name="aws-load-balancer-controller-${cluster_name}"
 NAMESPACE="kube-system"
-SERVICE_ACCOUNT_NAME="alb-ingress-controller"
+SERVICE_ACCOUNT_NAME="aws-load-balancer-controller"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 OIDC_PROVIDER=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
 cat <<EOF > trust.json
@@ -522,7 +528,7 @@ aws iam attach-role-policy \
 
 #### Kubernetes External Secrets
 
-Kubernetes External Secretsが使用するIAMロールを作成する。
+[Kubernetes External Secrets](https://github.com/external-secrets/kubernetes-external-secrets)が使用するIAMロールを作成する。
 
 ##### Cloudformation
 
@@ -661,6 +667,8 @@ Syncが上手くいかなかった場合は手動Syncを試す。
 argocd app sync <App名>
 ```
 
+AWS Load Balancer Controllerが作成する2つのWebgookについて、caBundleがcert-managerで生成される。その部分が同期しないので、マニフェストから削除しておく必要がある。
+
 ### 確認
 
 Podが正常に稼働していることを確認する。
@@ -714,7 +722,7 @@ stagingクラスターと同じ作業をクラスター名を変えて実施す�
 
 詳しくは`buildspec.yaml`を参照。
 
-### Kustomise
+### Kustomize
 
 Kustomize流のディレクトリ構成については以下の資料を参照。
 
