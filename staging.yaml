@@ -4,6 +4,7 @@ kind: ClusterConfig
 metadata:
   name: staging
   region: ap-northeast-1
+  version: "1.19"
 vpc:
   cidr: "10.1.0.0/16"
 
@@ -19,8 +20,12 @@ managedNodeGroups:
     ssh:
       allow: true
       publicKeyName: default
+      enableSsm: true
     privateNetworking: true
 
 cloudWatch:
   clusterLogging:
     enableTypes: ["*"]
+
+iam:
+  withOIDC: true

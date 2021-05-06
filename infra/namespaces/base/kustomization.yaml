@@ -2,3 +2,4 @@ resources:
 - frontend.yaml
 - backend.yaml
 - external-secrets.yaml
+- gatekeeper-system.yaml

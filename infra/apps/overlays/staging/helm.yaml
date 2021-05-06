@@ -17,5 +17,5 @@ spec:
         value: external-secrets
       - name: serviceAccount.annotations.eks\.amazonaws\.com/role-arn
         value: arn:aws:iam::XXXX_AWS_ACCOUNT_ID_XXXX:role/external-secrets-staging
-      - name: securityContext.fsGroup
-        value: "65534"
+      # - name: securityContext.fsGroup
+      #   value: "65534"

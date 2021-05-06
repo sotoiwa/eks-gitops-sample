@@ -6,7 +6,6 @@ metadata:
 spec:
   destination:
     server: https://kubernetes.default.svc
-    namespace: kube-system
   project: default
   source:
     path: namespaces/overlays/staging

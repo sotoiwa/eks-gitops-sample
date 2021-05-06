@@ -1,0 +1,6 @@
+resources:
+- gatekeeper.yaml
+# - default-deny-all-np.yaml
+# - allow-to-cluster-egress-np.yaml
+# - allow-from-namespace-ingress-np.yaml
+# - allow-from-node-ingress-np.yaml

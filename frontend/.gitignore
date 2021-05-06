@@ -7,3 +7,5 @@ venv/
 .venv
 __pycache__/
 cdk.out/
+report.asff
+*results.json

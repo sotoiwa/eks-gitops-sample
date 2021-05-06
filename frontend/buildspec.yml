@@ -5,18 +5,58 @@ env:
     APP_NAME: frontend
     ECR_REPOSITORY_NAME: frontend
     INFRA_CODECOMMIT_REPOSITORY_NAME: infra
+    DOCKER_BUILDKIT: "1"
   git-credential-helper: yes
+  # secrets-manager:
+  #   DOCKERHUB_USER: arn:aws:secretsmanager:ap-northeast-1:XXXXXXXXXXXX:secret:dockerhub-xvRCSt:username
+  #   DOCKERHUB_PASS: arn:aws:secretsmanager:ap-northeast-1:XXXXXXXXXXXX:secret:dockerhub-xvRCSt:password
 
 phases:
-  install:
-    runtime-versions:
-      docker: 18
   pre_build:
     commands:
-      - echo Logging in to Amazon ECR...
+      # AWS CLIのバージョン確認
       - aws --version
+
+      # Dockerのバージョン確認
+      - docker version
+
+      # Hadolintのインストール
+      - HADOLINT_VERSION=$(curl -s "https://api.github.com/repos/hadolint/hadolint/releases/latest" |
+          grep '"tag_name":' |
+          sed -E 's/.*"v([^"]+)".*/\1/'
+        )
+      - curl -s -L -o /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64
+      - chmod +x /usr/local/bin/hadolint
+      - hadolint --version
+
+      # Hadolintによるチェック
+      #
+      # ルール違反が検出された場合はビルドを停止する
+      # 無視したいルールがある場合は--ignoreで指定する
+      # hadolint --ignore DL3025 --ignore DL3026 Dockerfile
+      - hadolint Dockerfile
+
+      # Dockleのインストール
+      - DOCKLE_VERSION=$(curl -s "https://api.github.com/repos/goodwithtech/dockle/releases/latest" |
+          grep '"tag_name":' |
+          sed -E 's/.*"v([^"]+)".*/\1/'
+        )
+      - curl -s -L https://github.com/goodwithtech/dockle/releases/download/v${DOCKLE_VERSION}/dockle_${DOCKLE_VERSION}_Linux-64bit.tar.gz | tar xz -C /tmp
+      - mv /tmp/dockle /usr/local/bin
+      - dockle --version
+
+      # Trivyのインストール
+      # - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      - TRIVY_VERSION=$(curl -s "https://api.github.com/repos/aquasecurity/trivy/releases/latest" |
+          grep '"tag_name":' |
+          sed -E 's/.*"v([^"]+)".*/\1/'
+        )
+      - curl -s -L https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz | tar xz -C /tmp
+      - mv /tmp/trivy /usr/local/bin
+      - trivy --version
+
+      # 変数の設定
       - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
-      - aws ecr get-login-password | docker login --username AWS --password-stdin https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
       - ECR_REPOSITORY_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}
       - COMMIT_HASH=$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
@@ -26,19 +66,40 @@ phases:
         else
           TARGET_ENV=${PIPELINE_BRANCH_NAME}
         fi
+
+      # Docker Hubへのログイン
+      - echo ${DOCKERHUB_PASS} | docker login --username ${DOCKERHUB_USER} --password-stdin
+
+      # ECRへのログイン
+      - aws ecr get-login-password | docker login --username AWS --password-stdin https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
   build:
     commands:
-      - echo Build started on `date`
-      - echo Building the Docker image...
       - docker build -t ${ECR_REPOSITORY_URI}:latest .
       - docker tag ${ECR_REPOSITORY_URI}:latest ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
   post_build:
     commands:
-      - echo Build completed on `date`
-      - echo Pushing the Docker images...
+      # Dockleによるイメージチェック
+      #
+      # INFO以上で無視していないルールに違反した場合はビルドを停止する
+      - dockle --exit-code 1 --exit-level info --ignore CIS-DI-0007 --ignore CIS-DI-0005 --ignore CIS-DI-0006 --ignore DKL-LI-0003 ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+
+      # Trivyによるチェック（SecurityHub連携）
+      #
+      # 結果をasff形式で出力し、結果をSecurityHubに連携する
+      # HIGHとCRITICALのみを対象とする
+      - trivy image --no-progress --severity HIGH,CRITICAL --format template --template "@asff.tpl" -o report.asff ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+      - aws securityhub batch-import-findings --findings file://report.asff
+
+      # Trivyによるチェック（ビルド強制停止）
+      #
+      # CRITICALが検出された場合はビルドを停止する
+      - trivy image --no-progress --exit-code 1 --severity CRITICAL --ignore-unfixed ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+
+      # ECRへpush
       - docker push ${ECR_REPOSITORY_URI}:latest
       - docker push ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
-      - echo Creating Pull Request...
+
+      # プルリクエストの作成
       - INFRA_CODECOMMIT_REPOSITORY_URI=https://git-codecommit.${AWS_DEFAULT_REGION}.amazonaws.com/v1/repos/${INFRA_CODECOMMIT_REPOSITORY_NAME}
       - git config --global user.email "ci-build@example.com"
       - git config --global user.name "ci-build"

@@ -7,6 +7,9 @@ Parameters:
   CodePipelineArtifactStoreBucketName:
     Description: CodePipeline artifact store bucket name
     Type: String
+  DockerHubSecret:
+    Description: Secret ARN for Docker Hub
+    Type: String
 
 Resources:
   CodeBuildServiceRole:
@@ -56,6 +59,16 @@ Resources:
                   - codebuild:BatchPutTestCases
                 Resource:
                   - !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/${CodeBuildProjectName}-*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:dockerhub-*
+              - Effect: Allow
+                Action:
+                  - securityhub:BatchImportFindings
+                Resource:
+                  - !Sub arn:aws:securityhub:${AWS::Region}::product/aquasecurity/aquasecurity
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -70,6 +83,13 @@ Resources:
         ImagePullCredentialsType: CODEBUILD
         PrivilegedMode: true
         Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: DOCKERHUB_USER
+            Type: SECRETS_MANAGER
+            Value: !Sub ${DockerHubSecret}:username
+          - Name: DOCKERHUB_PASS
+            Type: SECRETS_MANAGER
+            Value: !Sub ${DockerHubSecret}:password
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED

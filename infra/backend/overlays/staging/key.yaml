@@ -8,3 +8,6 @@ spec:
   - key: mydb/staging
     name: username
     property: username
+  - key: mydb/staging
+    name: password
+    property: password

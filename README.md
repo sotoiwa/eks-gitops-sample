@@ -17,14 +17,10 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 
 |コンポーネント|バージョン|
 |---|---|
-|eksctl|0.36.0|
-|Kubernetes バージョン|1.18|
-|プラットフォームのバージョン|eks.3|
-|Argo CD|v1.8.2|
-|Argo CD CLI|v1.8.2|
-|AWS Load Balancer Controller|v2.1|
-|Kubernetes External Secrets|6.1|
-
+|Kubernetes バージョン|1.19|
+|Argo CD|v2.0.1|
+|AWS Load Balancer Controller|v2.1.3|
+|Kubernetes External Secrets|7.2.1|
 
 ## 参考リンク
 
@@ -35,61 +31,24 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 ## パイプラインの構築
 
 GitOpsでCIとCDは分離するので、CIを行うパイプラインを最初に作成する。
-### Argo CD用のIAMユーザーの作成
 
-CodeCommitへのアクセスにはいくつかの選択肢がある。
+### Docker Hubのクレデンシャル作成
 
-- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
-  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
-- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
-  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
-- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
-  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
-  - git clone codecommit::ap-northeast-1://your-repo-name
-- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
-  - AWS CLIに含まれている認証情報ヘルパーを使う方法
-
-Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
-
-- [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
-- [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
-
-Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+レートリミットを回避するため、CodeBuildではDocker Hubにログインする。そのためのユーザー名とパスワードをSecrets Managerに格納しておく。
 
 ```sh
-aws iam create-user --user-name argocd
-policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
-aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
+aws secretsmanager create-secret \
+  --region ap-northeast-1 \
+  --name dockerhub \
+  --secret-string '{"username":"hogehoge","password":"fugafuga"}'
 ```
 
-#### （参考）HTTPS接続
+### SecurityHubでのTrivyの統合
 
-HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
+SeurityHubでTrivyの結果を受け入れるように設定する。
 
-- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
-
-```sh
-aws iam create-service-specific-credential \
-  --user-name argocd \
-  --service-name codecommit.amazonaws.com
-```
-
-#### SSH接続
-
-SSH接続の場合はまず鍵ペアを生成する。
-
-```sh
-ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
-```
-
-公開鍵をIAMユーザーに登録する。
-
-- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
-
-```sh
-aws iam upload-ssh-public-key \
-  --user-name argocd \
-  --ssh-public-key-body file://id_rsa.pub
+```shell
+aws securityhub enable-import-findings-for-product --product-arn arn:aws:securityhub:ap-northeast-1::product/aquasecurity/aquasecurity
 ```
 
 ### CodeCommit
@@ -110,7 +69,7 @@ aws cloudformation deploy \
   --template-file cfn/codecommit.yaml
 ```
 
-#### （参考）CLI
+##### （参考）CLI
 
 ```sh
 aws codecommit create-repository --repository-name frontend
@@ -118,7 +77,9 @@ aws codecommit create-repository --repository-name backend
 aws codecommit create-repository --repository-name infra
 ```
 
-### ソースをCodeCommitにpush
+### ソースをCodeCommitに登録
+
+はじめに、
 
 CodeCommitリポジトリのURLを変数に入れておく。
 
@@ -193,7 +154,7 @@ ECRリポジトリを2つ作成する。
 |frontend|frontendアプリケーションのDockerイメージ格納用リポジトリ|
 |backend|backendアプリケーションのDockerイメージ格納用リポジトリ|
 
-#### （参考）CloudFormation
+#### CloudFormation
 
 ```sh
 aws cloudformation deploy \
@@ -208,7 +169,7 @@ frontend_ecr=$(aws ecr describe-repositories --repository-names frontend --query
 backend_ecr=$(aws ecr describe-repositories --repository-names backend --query 'repositories[0].repositoryUri' --output text); echo ${backend_ecr}
 ```
 
-#### （参考）CLI
+##### （参考）CLI
 
 ```sh
 aws ecr create-repository --repository-name frontend
@@ -244,6 +205,7 @@ CodeBuildプロジェクトは環境毎に共有し、2つ作成する。
 CodePipeline用のS3バケットを作成する。
 
 ```sh
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 codepipeline_artifactstore_bucket="codepipeline-artifactstore-${AWS_ACCOUNT_ID}"
 aws cloudformation deploy \
   --stack-name gitops-codepipeline-bucket-stack \
@@ -252,13 +214,16 @@ aws cloudformation deploy \
 ```
 
 CodeBuildプロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり2つ作成する。」
-プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境を環境変数で渡すようにしている。
+プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境変数で環境を渡すようにしている。
 
 ```sh
+docker_hub_secret=$(aws secretsmanager list-secrets | jq -r '.SecretList[] | select( .Name == "dockerhub" ) | .ARN')
 aws cloudformation deploy \
   --stack-name gitops-frontend-codebuild-stack \
   --template-file cfn/codebuild.yaml \
-  --parameter-overrides CodeBuildProjectName=frontend-build CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
+  --parameter-overrides CodeBuildProjectName=frontend-build \
+      CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
+      DockerHubSecret=${docker_hub_secret} \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -266,7 +231,9 @@ aws cloudformation deploy \
 aws cloudformation deploy \
   --stack-name gitops-backend-codebuild-stack \
   --template-file cfn/codebuild.yaml \
-  --parameter-overrides CodeBuildProjectName=backend-build CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
+  --parameter-overrides CodeBuildProjectName=backend-build \
+      CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
+      DockerHubSecret=${docker_hub_secret} \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -333,15 +300,15 @@ eksctl create cluster -f ${cluster_name}.yaml
 
 いくつかのPodはIAMロールが必要なため、IAM Roles for Service Accounts(IRSA)を設定する。
 
-IRSA関連の操作にeksctlを使ってもよいのだが、ロール名が自動生成となりわかりにくいのと、その名前をKubernetesマニフェストに反映する必要がある。
-今回はなるべく使わないことにする。eksctlを使わない場合のやり方は以下にまとまっている。
+IRSA関連の操作にeksctlを使ってもよいが、ロール名が自動生成となりわかりにくいのと、そのロール名をKubernetesマニフェストに反映する必要がある。
+今回はなるべくeksctlを使わないことにする。使わない場合のやり方は以下にまとまっている。
 
 - [Kubernetes サービスアカウントに対するきめ細やかな IAM ロール割り当ての紹介](https://aws.amazon.com/jp/blogs/news/introducing-fine-grained-iam-roles-service-accounts/)
 - [サービスアカウントの IAM ロールとポリシーの作成](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-service-account-iam-policy-and-role.html)
 
 #### OICDプロバイダー
 
-OICDプロバイダーはKubernetesリソースを作っているわけではないので、eksctlで作成する。この設定はクラスターの設定ファイル内で設定することも可能。
+クラスターの作成時に有効にしていない場合は、OICDプロバイダーを作成する。この操作はKubernetesリソースを作っているわけではないので、eksctlで作成する。
 
 ```sh
 eksctl utils associate-iam-oidc-provider \
@@ -370,7 +337,7 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-##### （参考）CLI
+###### （参考）CLI
 
 テーブルを作る。
 
@@ -479,7 +446,7 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-##### （参考）CLI
+###### （参考）CLI
 
 IAMポリシーを作成する。共通のものを使用する。
 
@@ -554,6 +521,64 @@ aws secretsmanager create-secret \
   --secret-string '{"username":"admin","password":"1234"}'
 ```
 
+### Argo CD用のIAMユーザーの作成
+
+Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。今回はユーザーを共用するので、この操作は1回だけ実施する。
+
+CodeCommitへのアクセスにはいくつかの選択肢がある。
+
+- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
+  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
+- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
+  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
+- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
+  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
+  - git clone codecommit::ap-northeast-1://your-repo-name
+- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
+  - AWS CLIに含まれている認証情報ヘルパーを使う方法
+
+Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
+
+- [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
+- [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
+
+Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+
+```sh
+aws iam create-user --user-name argocd
+policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
+aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
+```
+
+#### SSH接続
+
+SSH接続の場合はまず鍵ペアを生成する。
+
+```sh
+ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
+```
+
+公開鍵をIAMユーザーに登録する。
+
+- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
+
+```sh
+aws iam upload-ssh-public-key \
+  --user-name argocd \
+  --ssh-public-key-body file://id_rsa.pub
+```
+
+##### （参考）HTTPS接続
+
+HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
+
+- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
+
+```sh
+aws iam create-service-specific-credential \
+  --user-name argocd \
+  --service-name codecommit.amazonaws.com
+```
 ### Argo CDのデプロイ
 
 stagingクラスターにArgo CDをデプロイする。
@@ -580,17 +605,9 @@ export ARGOCD_OPTS='--port-forward-namespace argocd'
 argocd login ${argocd_server} --username admin --password ${argocd_pwd} --insecure
 ```
 
-### CodeCommitリポジトリを登録
+### CodeCommitリポジトリの登録
 
 CodeCommitリポジトリを登録する。
-
-#### （参考）HTTPS接続の場合
-
-```sh
-argocd repo add ${infra_codecommit_http} --username <username> --password <password>
-```
-
-認証情報は`repo-XXXXXXXXXX`というSecretに格納される。
 
 #### SSH接続の場合
 
@@ -623,6 +640,14 @@ argocd repo list
 秘密鍵は`repo-XXXXXXXXXX`というSecretに格納される。
 
 以上でArgo CDのセットアップが完了。
+
+##### （参考）HTTPS接続の場合
+
+```sh
+argocd repo add ${infra_codecommit_http} --username <username> --password <password>
+```
+
+認証情報は`repo-XXXXXXXXXX`というSecretに格納される。
 
 ### Argo CDアプリケーションの作成
 

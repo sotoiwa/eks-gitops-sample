@@ -42,3 +42,30 @@ metadata:
 spec:
   source:
     path: cert-manager/overlays/staging
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: calico
+  namespace: argocd
+spec:
+  source:
+    path: calico/overlays/staging
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gatekeeper
+  namespace: argocd
+spec:
+  source:
+    path: gatekeeper/overlays/staging
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  source:
+    path: argocd/overlays/staging

@@ -8,3 +8,6 @@ spec:
   - key: mydb/production
     name: username
     property: username
+  - key: mydb/production
+    name: password
+    property: password
