@@ -692,8 +692,6 @@ Syncが上手くいかなかった場合は手動Syncを試す。
 argocd app sync <App名>
 ```
 
-AWS Load Balancer Controllerが作成する2つのWebgookについて、caBundleがcert-managerで生成される。その部分が同期しないので、マニフェストから削除しておく必要がある。
-
 ### 確認
 
 Podが正常に稼働していることを確認する。
