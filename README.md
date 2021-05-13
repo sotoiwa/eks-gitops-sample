@@ -600,7 +600,7 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ```sh
 argocd_server=localhost:8080
-argocd_pwd=$(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o name | cut -d'/' -f 2)
+argocd_pwd=$(kubectl -n argocd get secret argocd-initial-admin-secret -o json | jq -r '.data.password' | base64 --decode)
 export ARGOCD_OPTS='--port-forward-namespace argocd'
 argocd login ${argocd_server} --username admin --password ${argocd_pwd} --insecure
 ```
