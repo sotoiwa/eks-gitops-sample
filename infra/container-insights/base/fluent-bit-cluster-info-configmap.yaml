@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-cluster-info
+  namespace: amazon-cloudwatch
+data:
+  cluster.name: staging
+  http.port: "2020"
+  http.server: "On"
+  logs.region: ap-northeast-1
+  read.head: "Off"
+  read.tail: "On"

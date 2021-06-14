@@ -8,8 +8,8 @@ spec:
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: policies/overlays/staging
     repoURL: ssh://XXXX_SSH_KEY_ID_XXXX@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra
+    path: policies/overlays/staging
   syncPolicy:
     automated:
       prune: true

@@ -9,8 +9,8 @@ spec:
     namespace: kube-system
   project: default
   source:
-    path: aws-load-balancer-controller/overlays/staging
     repoURL: ssh://XXXX_SSH_KEY_ID_XXXX@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra
+    path: aws-load-balancer-controller/overlays/staging
   syncPolicy:
     automated:
       prune: true

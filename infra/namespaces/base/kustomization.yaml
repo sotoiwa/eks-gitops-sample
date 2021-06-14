@@ -1,5 +1,7 @@
 resources:
+- argocd.yaml
 - frontend.yaml
 - backend.yaml
 - external-secrets.yaml
 - gatekeeper-system.yaml
+- amazon-cloudwatch.yaml

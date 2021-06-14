@@ -1,5 +1,7 @@
 resources:
-- https://raw.githubusercontent.com/argoproj/argo-cd/v2.0.1/manifests/install.yaml
+- https://raw.githubusercontent.com/argoproj/argo-cd/v2.0.3/manifests/install.yaml
 
 patches:
 - argocd-ssh-known-hosts-cm.yaml
+- argocd-cm.yaml
+- imagePullSecrets.yaml

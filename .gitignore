@@ -10,3 +10,4 @@ cdk.out/
 id_rsa*
 trust.json*
 iam-policy.json*
+.dockerconfigjson

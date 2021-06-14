@@ -17,9 +17,9 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 
 |コンポーネント|バージョン|
 |---|---|
-|Kubernetes バージョン|1.19|
-|Argo CD|v2.0.1|
-|AWS Load Balancer Controller|v2.1.3|
+|Kubernetes バージョン|1.20|
+|Argo CD|v2.0.3|
+|AWS Load Balancer Controller|v2.2.0|
 |Kubernetes External Secrets|7.2.1|
 
 ## 参考リンク
@@ -43,9 +43,23 @@ aws secretsmanager create-secret \
   --secret-string '{"username":"hogehoge","password":"fugafuga"}'
 ```
 
+クラスター上でもDocker Hubからのイメージ取得がレートリミットに引っかかることがあるため、imagePullSecretとして使用するためのdockerconfigjsonを作成しておく。
+
+```sh
+dockerconfigjson=$(kubectl create secret docker-registry mysecret \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=hogehoge \
+  --docker-password=fugafuga --dry-run=client -o json \
+  | jq -r '.data.".dockerconfigjson"' | base64 --decode)
+aws secretsmanager create-secret \
+  --region ap-northeast-1 \
+  --name dockerconfigjson \
+  --secret-string ${dockerconfigjson}
+```
+
 ### SecurityHubでのTrivyの統合
 
-SeurityHubでTrivyの結果を受け入れるように設定する。
+SeurityHubでTrivyの結果を受け入れるように設定する。Aquaとの統合を有効化する。
 
 ```shell
 aws securityhub enable-import-findings-for-product --product-arn arn:aws:securityhub:ap-northeast-1::product/aquasecurity/aquasecurity
@@ -67,14 +81,6 @@ CodeCommitリポジトリを3つ作成する。
 aws cloudformation deploy \
   --stack-name gitops-codecommit-stack \
   --template-file cfn/codecommit.yaml
-```
-
-##### （参考）CLI
-
-```sh
-aws codecommit create-repository --repository-name frontend
-aws codecommit create-repository --repository-name backend
-aws codecommit create-repository --repository-name infra
 ```
 
 ### ソースをCodeCommitに登録
@@ -109,13 +115,13 @@ git init
 git add .
 git commit -m "first commit"
 git remote add origin ${frontend_codecommit_http}
-git push -u origin master
+git push -u origin main
 git checkout -b production
 git push -u origin production
-git checkout master
+git checkout main
 ```
 
-backendアプリケーションのソースをCodeCommitにpushする。
+backendアプリケーションのソースをCodeCommitにpushする。productionブランチも作成しておく。
 
 ```sh
 cd ../backend/
@@ -123,13 +129,13 @@ git init
 git add .
 git commit -m "first commit"
 git remote add origin ${backend_codecommit_http}
-git push -u origin master
+git push -u origin main
 git checkout -b production
 git push -u origin production
-git checkout master
+git checkout main
 ```
 
-infraのマニフェストをCodeCommitにpushする。一部のマニフェストにはAWSアカウントIDやSSHキーIDが含まれているので、自身の環境に合わせて一括置換する。
+infraのマニフェストをCodeCommitにpushする。一部のマニフェストにはAWSアカウントIDやSSHキーIDが含まれているので、自身の環境に合わせて一括置換する。productionブランチも作成しておく。
 
 ```sh
 cd ../infra/
@@ -141,7 +147,10 @@ git init
 git add .
 git commit -m "first commit"
 git remote add origin ${infra_codecommit_http}
-git push -u origin master
+git push -u origin main
+git checkout -b production
+git push -u origin production
+git checkout main
 cd ../
 ```
 
@@ -167,13 +176,6 @@ ECRリポジトリのURLを変数に入れておく。
 ```sh
 frontend_ecr=$(aws ecr describe-repositories --repository-names frontend --query 'repositories[0].repositoryUri' --output text); echo ${frontend_ecr}
 backend_ecr=$(aws ecr describe-repositories --repository-names backend --query 'repositories[0].repositoryUri' --output text); echo ${backend_ecr}
-```
-
-##### （参考）CLI
-
-```sh
-aws ecr create-repository --repository-name frontend
-aws ecr create-repository --repository-name backend
 ```
 
 ### CodePipelineとCodeBuild
@@ -213,7 +215,7 @@ aws cloudformation deploy \
   --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket}
 ```
 
-CodeBuildプロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり2つ作成する。」
+CodeBuildプロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり2つ作成する。
 プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境変数で環境を渡すようにしている。
 
 ```sh
@@ -243,7 +245,7 @@ CodePipelineを作成する。パイプラインはアプリケーション毎�
 aws cloudformation deploy \
   --stack-name gitops-frontend-staging-pipeline-stack \
   --template-file cfn/codepipeline.yaml \
-  --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} CodeCommitRepositoryName=frontend CodeCommitBranchName=master CodeBuildProjectName=frontend-build \
+  --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} CodeCommitRepositoryName=frontend CodeCommitBranchName=main CodeBuildProjectName=frontend-build \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -251,7 +253,7 @@ aws cloudformation deploy \
 aws cloudformation deploy \
   --stack-name gitops-backend-staging-pipeline-stack \
   --template-file cfn/codepipeline.yaml \
-  --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} CodeCommitRepositoryName=backend CodeCommitBranchName=master CodeBuildProjectName=backend-build \
+  --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} CodeCommitRepositoryName=backend CodeCommitBranchName=main CodeBuildProjectName=backend-build \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -279,6 +281,65 @@ aws cloudformation deploy \
 
 ```sh
 aws codepipeline start-pipeline-execution --name frontend-master-pipeline
+```
+
+### Argo CD用のIAMユーザーの作成
+
+Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。クラスターごとにIAMユーザーを分けてもよいが、今回はユーザーを共用するので、この操作は1回だけ実施する。
+
+CodeCommitへのアクセスにはいくつかの選択肢がある。
+
+- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
+  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
+- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
+  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
+- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
+  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
+  - git clone codecommit::ap-northeast-1://your-repo-name
+- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
+  - AWS CLIに含まれている認証情報ヘルパーを使う方法
+
+Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
+
+- [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
+- [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
+
+Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+
+```sh
+aws iam create-user --user-name argocd
+policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
+aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
+```
+
+#### SSH接続
+
+SSH接続の場合はまず鍵ペアを生成する。
+
+```sh
+ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
+```
+
+公開鍵をIAMユーザーに登録する。
+
+- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
+
+```sh
+aws iam upload-ssh-public-key \
+  --user-name argocd \
+  --ssh-public-key-body file://id_rsa.pub
+```
+
+##### （参考）HTTPS接続
+
+HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
+
+- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
+
+```sh
+aws iam create-service-specific-credential \
+  --user-name argocd \
+  --service-name codecommit.amazonaws.com
 ```
 
 ## stagingクラスターの作成
@@ -337,98 +398,6 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-###### （参考）CLI
-
-テーブルを作る。
-
-```sh
-aws dynamodb create-table --table-name "messages-${cluster_name}" \
-  --attribute-definitions '[{"AttributeName":"uuid","AttributeType": "S"}]' \
-  --key-schema '[{"AttributeName":"uuid","KeyType": "HASH"}]' \
-  --provisioned-throughput '{"ReadCapacityUnits": 1,"WriteCapacityUnits": 1}'
-```
-
-IAMポリシーを作成する。
-
-```sh
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-cat <<EOF > iam-policy.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ListAndDescribe",
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:List*",
-        "dynamodb:DescribeReservedCapacity*",
-        "dynamodb:DescribeLimits",
-        "dynamodb:DescribeTimeToLive"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SpecificTable",
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:BatchGet*",
-        "dynamodb:DescribeStream",
-        "dynamodb:DescribeTable",
-        "dynamodb:Get*",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:BatchWrite*",
-        "dynamodb:CreateTable",
-        "dynamodb:Delete*",
-        "dynamodb:Update*",
-        "dynamodb:PutItem"
-      ],
-      "Resource": "arn:aws:dynamodb:ap-northeast-1:${AWS_ACCOUNT_ID}:table/messages-${cluster_name}"
-    }
-  ]
-}
-EOF
-aws iam create-policy \
-  --policy-name backend-${cluster_name}-policy \
-  --policy-document file://iam-policy.json
-policy_arn=$(aws iam list-policies | jq -r '.Policies[] | select( .PolicyName == "backend-'"${cluster_name}"'-policy" ) | .Arn')
-```
-
-IAMロールを作成する。
-
-```sh
-role_name="backend-${cluster_name}"
-NAMESPACE="backend"
-SERVICE_ACCOUNT_NAME="backend"
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-OIDC_PROVIDER=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
-cat <<EOF > trust.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "${OIDC_PROVIDER}:sub": "system:serviceaccount:${NAMESPACE}:${SERVICE_ACCOUNT_NAME}"
-        }
-      }
-    }
-  ]
-}
-EOF
-aws iam create-role \
-  --role-name ${role_name} \
-  --assume-role-policy-document file://trust.json
-aws iam attach-role-policy \
-  --role-name ${role_name} \
-  --policy-arn ${policy_arn}
-```
-
 #### AWS Load Balancer Controller
 
 [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)が使用するIAMロールを作成する。
@@ -444,53 +413,6 @@ aws cloudformation deploy \
   --template-file cfn/aws-load-balancer-controller-iam.yaml \
   --parameter-overrides ClusterName=${cluster_name} NamespaceName=kube-system ServiceAccountName=aws-load-balancer-controller OidcProvider=${oidc_provider} \
   --capabilities CAPABILITY_NAMED_IAM
-```
-
-###### （参考）CLI
-
-IAMポリシーを作成する。共通のものを使用する。
-
-```sh
-curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.1.0/docs/install/iam_policy.json
-aws iam create-policy \
-  --policy-name AWSLoadBalancerControllerIAMPolicy \
-  --policy-document file://iam-policy.json
-policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSLoadBalancerControllerIAMPolicy`].{ARN:Arn}' --output text)
-```
-
-IAMロールを作成する。
-
-```sh
-role_name="aws-load-balancer-controller-${cluster_name}"
-NAMESPACE="kube-system"
-SERVICE_ACCOUNT_NAME="aws-load-balancer-controller"
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-OIDC_PROVIDER=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
-cat <<EOF > trust.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "${OIDC_PROVIDER}:sub": "system:serviceaccount:${NAMESPACE}:${SERVICE_ACCOUNT_NAME}"
-        }
-      }
-    }
-  ]
-}
-EOF
-aws iam create-role \
-  --role-name ${role_name} \
-  --assume-role-policy-document file://trust.json
-aws iam attach-role-policy \
-  --role-name ${role_name} \
-  --policy-arn ${policy_arn}
 ```
 
 #### Kubernetes External Secrets
@@ -521,63 +443,30 @@ aws secretsmanager create-secret \
   --secret-string '{"username":"admin","password":"1234"}'
 ```
 
-### Argo CD用のIAMユーザーの作成
+#### Container Insights
 
-Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。今回はユーザーを共用するので、この操作は1回だけ実施する。
+[Container Insights](https://docs.aws.amazon.com/ja_jp/AmazonCloudWatch/latest/monitoring/deploy-container-insights-EKS.html)が使用するIAMロールを作成する。
 
-CodeCommitへのアクセスにはいくつかの選択肢がある。
+##### Cloudformation
 
-- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
-  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
-- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
-  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
-- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
-  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
-  - git clone codecommit::ap-northeast-1://your-repo-name
-- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
-  - AWS CLIに含まれている認証情報ヘルパーを使う方法
-
-Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
-
-- [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
-- [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
-
-Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+IAMロールを作成する。
 
 ```sh
-aws iam create-user --user-name argocd
-policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
-aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
+oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+aws cloudformation deploy \
+  --stack-name gitops-cloudwatch-agent-iam-${cluster_name}-stack \
+  --template-file cfn/cloudwatch-agent-iam.yaml \
+  --parameter-overrides ClusterName=${cluster_name} NamespaceName=amazon-cloudwatch ServiceAccountName=cloudwatch-agent OidcProvider=${oidc_provider} \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
-#### SSH接続
-
-SSH接続の場合はまず鍵ペアを生成する。
-
 ```sh
-ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
-```
-
-公開鍵をIAMユーザーに登録する。
-
-- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
-
-```sh
-aws iam upload-ssh-public-key \
-  --user-name argocd \
-  --ssh-public-key-body file://id_rsa.pub
-```
-
-##### （参考）HTTPS接続
-
-HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
-
-- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
-
-```sh
-aws iam create-service-specific-credential \
-  --user-name argocd \
-  --service-name codecommit.amazonaws.com
+oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+aws cloudformation deploy \
+  --stack-name gitops-fluent-bit-iam-${cluster_name}-stack \
+  --template-file cfn/fluent-bit-iam.yaml \
+  --parameter-overrides ClusterName=${cluster_name} NamespaceName=amazon-cloudwatch ServiceAccountName=fluent-bit OidcProvider=${oidc_provider} \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 ### Argo CDのデプロイ
 
@@ -670,9 +559,12 @@ Necoだと、以下がApp of Appsのディレクトリとなっており参考�
 App of AppsのApplicationを作成する。
 
 ```sh
+branch=master
+# branch=production
 ssh_key_id=$(aws iam list-ssh-public-keys --user-name argocd | jq -r '.SSHPublicKeys[].SSHPublicKeyId')
 argocd app create apps \
   --repo ssh://${ssh_key_id}@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra \
+  --revision ${branch} \
   --path apps/overlays/${cluster_name} \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace argocd \

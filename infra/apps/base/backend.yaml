@@ -9,8 +9,8 @@ spec:
     namespace: backend
   project: default
   source:
-    path: backend/overlays/staging
     repoURL: ssh://XXXX_SSH_KEY_ID_XXXX@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra
+    path: backend/overlays/staging
   syncPolicy:
     automated:
       prune: true

@@ -9,8 +9,8 @@ spec:
     namespace: argocd
   project: default
   source:
-    path: argocd/overlays/staging
     repoURL: ssh://XXXX_SSH_KEY_ID_XXXX@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra
+    path: argocd/overlays/staging
   syncPolicy:
     automated:
       prune: true

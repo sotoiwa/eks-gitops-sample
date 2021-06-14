@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::XXXX_AWS_ACCOUNT_ID_XXXX:role/cloudwatch-agent-production
+  name: cloudwatch-agent
+  namespace: amazon-cloudwatch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::XXXX_AWS_ACCOUNT_ID_XXXX:role/fluent-bit-production
+  name: fluent-bit
+  namespace: amazon-cloudwatch

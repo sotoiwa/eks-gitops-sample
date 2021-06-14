@@ -9,3 +9,5 @@ resources:
 - gatekeeper.yaml
 - policies.yaml
 - argocd.yaml
+- metrics-server.yaml
+- container-insights.yaml

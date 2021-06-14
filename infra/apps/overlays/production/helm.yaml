@@ -5,6 +5,7 @@ metadata:
   namespace: argocd
 spec:
   source:
+    targetRevision: 7.2.1
     helm:
       parameters:
       - name: env.AWS_DEFAULT_REGION

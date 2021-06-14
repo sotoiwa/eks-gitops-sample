@@ -6,6 +6,10 @@ env:
     ECR_REPOSITORY_NAME: frontend
     INFRA_CODECOMMIT_REPOSITORY_NAME: infra
     DOCKER_BUILDKIT: "1"
+    STAGING_BRANCH_NAME: "main"
+    PRODUCTION_BRANCH_NAME: "production"
+    STAGING_ENV_NAME: "staging"
+    PRODUCTION_ENV_NAME: "production"
   git-credential-helper: yes
   # secrets-manager:
   #   DOCKERHUB_USER: arn:aws:secretsmanager:ap-northeast-1:XXXXXXXXXXXX:secret:dockerhub-xvRCSt:username
@@ -14,6 +18,18 @@ env:
 phases:
   pre_build:
     commands:
+      # 変数の設定
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+      - ECR_REPOSITORY_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}
+      - COMMIT_HASH=$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - |
+        if [ "${PIPELINE_BRANCH_NAME}" = "${STAGING_BRANCH_NAME}" ]; then
+          TARGET_ENV="${STAGING_ENV_NAME}"
+        else
+          TARGET_ENV="${PRODUCTION_ENV_NAME}"
+        fi
+
       # AWS CLIのバージョン確認
       - aws --version
 
@@ -55,28 +71,18 @@ phases:
       - mv /tmp/trivy /usr/local/bin
       - trivy --version
 
-      # 変数の設定
-      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
-      - ECR_REPOSITORY_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}
-      - COMMIT_HASH=$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} | cut -c 1-7)
-      - IMAGE_TAG=${COMMIT_HASH:=latest}
-      - |
-        if [ "${PIPELINE_BRANCH_NAME}" = "master" ]; then
-          TARGET_ENV="staging"
-        else
-          TARGET_ENV=${PIPELINE_BRANCH_NAME}
-        fi
-
       # Docker Hubへのログイン
       - echo ${DOCKERHUB_PASS} | docker login --username ${DOCKERHUB_USER} --password-stdin
 
       # ECRへのログイン
       - aws ecr get-login-password | docker login --username AWS --password-stdin https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
   build:
+    on-failure: ABORT
     commands:
       - docker build -t ${ECR_REPOSITORY_URI}:latest .
       - docker tag ${ECR_REPOSITORY_URI}:latest ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
   post_build:
+    on-failure: ABORT
     commands:
       # Dockleによるイメージチェック
       #
@@ -103,7 +109,7 @@ phases:
       - INFRA_CODECOMMIT_REPOSITORY_URI=https://git-codecommit.${AWS_DEFAULT_REGION}.amazonaws.com/v1/repos/${INFRA_CODECOMMIT_REPOSITORY_NAME}
       - git config --global user.email "ci-build@example.com"
       - git config --global user.name "ci-build"
-      - git clone ${INFRA_CODECOMMIT_REPOSITORY_URI}
+      - git clone -q ${INFRA_CODECOMMIT_REPOSITORY_URI}
       - cd ${INFRA_CODECOMMIT_REPOSITORY_NAME}
       - git branch -a
       - NEW_BRANCH_NAME="ci-build/${TARGET_ENV}/${APP_NAME}/${COMMIT_HASH}"
@@ -118,7 +124,18 @@ phases:
       - PR_TITLE="[${TARGET_ENV^^} DEPLOY REQUEST] ${NEW_BRANCH_NAME}"
       - PR_MSG="Replace ${TARGET_ENV} ${ECR_REPOSITORY_NAME} image tag to ${COMMIT_HASH}."
       - |
-        aws codecommit create-pull-request \
+        pull_request_id=$(aws codecommit create-pull-request \
           --title "${PR_TITLE}" \
           --description "${PR_MSG}" \
-          --targets "repositoryName=${INFRA_CODECOMMIT_REPOSITORY_NAME},sourceReference=${NEW_BRANCH_NAME},destinationReference=master"
+          --targets "repositoryName=${INFRA_CODECOMMIT_REPOSITORY_NAME},sourceReference=${NEW_BRANCH_NAME},destinationReference=${STAGING_BRANCH_NAME}" \
+          --query 'pullRequest.pullRequestId' --output text)
+      # ステージング環境ではマージまで実施
+      - |
+        if [ "${PIPELINE_BRANCH_NAME}" = "${STAGING_BRANCH_NAME}" ]; then
+          aws codecommit merge-pull-request-by-fast-forward \
+            --pull-request-id ${pull_request_id} \
+            --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME}
+          aws codecommit delete-branch  \
+            --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME} \
+            --branch-name ${NEW_BRANCH_NAME}
+        fi

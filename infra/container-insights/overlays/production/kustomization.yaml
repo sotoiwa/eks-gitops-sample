@@ -1,0 +1,7 @@
+resources:
+- ../../base
+
+patches:
+- cwagentconfig.json.yaml
+- cluster.name.yaml
+- sa.yaml

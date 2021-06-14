@@ -1,0 +1,9 @@
+resources:
+- cwagent-configmap.yaml
+- cwagent-serviceaccount.yaml
+- cwagent-daemonset.yaml
+- fluent-bit-cluster-info-configmap.yaml
+- fluent-bit.yaml
+
+patches:
+- imagePullSecrets.yaml

@@ -6,3 +6,16 @@ metadata:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
   name: gatekeeper-system
+---
+apiVersion: kubernetes-client.io/v1
+kind: ExternalSecret
+metadata:
+  name: dockerhub
+  namespace: gatekeeper-system
+spec:
+  backendType: secretsManager
+  template:
+    type: kubernetes.io/dockerconfigjson
+  data:
+    - key: dockerconfigjson
+      name: .dockerconfigjson

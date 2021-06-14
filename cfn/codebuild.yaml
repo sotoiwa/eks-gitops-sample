@@ -27,7 +27,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
-        - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
+        # - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
       Policies:
         - PolicyName: CodeBuildBasePolicy
           PolicyDocument:
@@ -68,7 +68,17 @@ Resources:
                 Action:
                   - securityhub:BatchImportFindings
                 Resource:
-                  - !Sub arn:aws:securityhub:${AWS::Region}::product/aquasecurity/aquasecurity
+                  - !Sub arn:aws:securityhub:${AWS::Region}:${AWS::AccountId}:product/aquasecurity/aquasecurity
+              - Effect: Allow
+                Action:
+                  - codecommit:GitPull
+                  - codecommit:GitPush
+                  - codecommit:CreatePullRequest
+                  - MergePullRequestByFastForward
+                  - MergePullRequestBySquash
+                  - MergePullRequestByThreeWay
+                Resource:
+                  - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:*
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
