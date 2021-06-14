@@ -27,7 +27,6 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
-        # - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
       Policies:
         - PolicyName: CodeBuildBasePolicy
           PolicyDocument:
