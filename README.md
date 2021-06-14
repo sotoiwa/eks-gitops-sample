@@ -65,6 +65,65 @@ SeurityHubでTrivyの結果を受け入れるように設定する。Aquaとの�
 aws securityhub enable-import-findings-for-product --product-arn arn:aws:securityhub:ap-northeast-1::product/aquasecurity/aquasecurity
 ```
 
+### Argo CD用のIAMユーザーの作成
+
+Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。クラスターごとにIAMユーザーを分けてもよいが、今回はユーザーを共用するので、この操作は1回だけ実施する。
+
+CodeCommitへのアクセスにはいくつかの選択肢がある。
+
+- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
+  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
+- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
+  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
+- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
+  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
+  - git clone codecommit::ap-northeast-1://your-repo-name
+- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
+  - AWS CLIに含まれている認証情報ヘルパーを使う方法
+
+Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
+
+- [Private Repositories](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/)
+- [Secret Management](https://argo-cd.readthedocs.io/en/stable/operator-manual/secret-management/)
+
+Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+
+```sh
+aws iam create-user --user-name argocd
+policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
+aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
+```
+
+#### SSH接続
+
+SSH接続の場合はまず鍵ペアを生成する。
+
+```sh
+ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
+```
+
+公開鍵をIAMユーザーに登録する。
+
+- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
+
+```sh
+aws iam upload-ssh-public-key \
+  --user-name argocd \
+  --ssh-public-key-body file://id_rsa.pub
+```
+
+##### （参考）HTTPS接続
+
+HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
+
+- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
+
+```sh
+aws iam create-service-specific-credential \
+  --user-name argocd \
+  --service-name codecommit.amazonaws.com
+```
+
 ### CodeCommit
 
 CodeCommitリポジトリを3つ作成する。
@@ -274,66 +333,6 @@ aws cloudformation deploy \
 ```sh
 aws codepipeline start-pipeline-execution --name frontend-master-pipeline
 ```
-
-### Argo CD用のIAMユーザーの作成
-
-Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。クラスターごとにIAMユーザーを分けてもよいが、今回はユーザーを共用するので、この操作は1回だけ実施する。
-
-CodeCommitへのアクセスにはいくつかの選択肢がある。
-
-- [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
-  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
-- [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
-  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
-- [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
-  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
-  - git clone codecommit::ap-northeast-1://your-repo-name
-- [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
-  - AWS CLIに含まれている認証情報ヘルパーを使う方法
-
-Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
-
-- [Private Repositories](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/)
-- [Secret Management](https://argo-cd.readthedocs.io/en/stable/operator-manual/secret-management/)
-
-Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
-
-```sh
-aws iam create-user --user-name argocd
-policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSCodeCommitReadOnly`].{ARN:Arn}' --output text)
-aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
-```
-
-#### SSH接続
-
-SSH接続の場合はまず鍵ペアを生成する。
-
-```sh
-ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
-```
-
-公開鍵をIAMユーザーに登録する。
-
-- [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
-
-```sh
-aws iam upload-ssh-public-key \
-  --user-name argocd \
-  --ssh-public-key-body file://id_rsa.pub
-```
-
-##### （参考）HTTPS接続
-
-HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。今回はSSH接続を使うのでこの手順はスキップ。
-
-- [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
-
-```sh
-aws iam create-service-specific-credential \
-  --user-name argocd \
-  --service-name codecommit.amazonaws.com
-```
-
 ## stagingクラスターの作成
 
 今回、アプリケーションの`main`ブランチ＝stagingクラスター、`production`ブランチ＝productionクラスターという構成にする。
