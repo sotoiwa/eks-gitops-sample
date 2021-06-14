@@ -75,8 +75,6 @@ CodeCommitリポジトリを3つ作成する。
 |backend|backendアプリケーションのソースコードとDockerfile格納用リポジトリ|
 |infra|Kubernetesマニフェストの格納用リポジトリ|
 
-#### CloudFormation
-
 ```sh
 aws cloudformation deploy \
   --stack-name gitops-codecommit-stack \
@@ -85,9 +83,7 @@ aws cloudformation deploy \
 
 ### ソースをCodeCommitに登録
 
-はじめに、
-
-CodeCommitリポジトリのURLを変数に入れておく。
+はじめに、odeCommitリポジトリのURLを変数に入れておく。
 
 ```sh
 frontend_codecommit_http=$(aws codecommit get-repository --repository-name frontend --query 'repositoryMetadata.cloneUrlHttp' --output text); echo ${frontend_codecommit_http}
@@ -107,7 +103,7 @@ git config --global user.name "hogehoge"
 git config --global user.email "hogehoge@example.com"
 ```
 
-frontendアプリケーションのソースをCodeCommitにpushする。productionブランチも作成しておく。
+frontendアプリケーションのソースをCodeCommitにpushする。`production`ブランチも作成しておく。
 
 ```sh
 cd frontend/
@@ -121,7 +117,7 @@ git push -u origin production
 git checkout main
 ```
 
-backendアプリケーションのソースをCodeCommitにpushする。productionブランチも作成しておく。
+backendアプリケーションのソースをCodeCommitにpushする。`production`ブランチも作成しておく。
 
 ```sh
 cd ../backend/
@@ -135,7 +131,7 @@ git push -u origin production
 git checkout main
 ```
 
-infraのマニフェストをCodeCommitにpushする。一部のマニフェストにはAWSアカウントIDやSSHキーIDが含まれているので、自身の環境に合わせて一括置換する。productionブランチも作成しておく。
+infraのマニフェストをCodeCommitにpushする。一部のマニフェストにはAWSアカウントIDやSSHキーIDが含まれているので、自身の環境に合わせて一括置換する。`production`ブランチも作成しておく。
 
 ```sh
 cd ../infra/
@@ -162,8 +158,6 @@ ECRリポジトリを2つ作成する。
 |---|---|
 |frontend|frontendアプリケーションのDockerイメージ格納用リポジトリ|
 |backend|backendアプリケーションのDockerイメージ格納用リポジトリ|
-
-#### CloudFormation
 
 ```sh
 aws cloudformation deploy \
@@ -197,8 +191,6 @@ CodeBuildプロジェクトは環境毎に共有し、2つ作成する。
 |---|---|
 |frontend-build|frontendリポジトリのmasterブランチへのコミットをトリガーに起動|
 |backend-build|backendリポジトリのmasterブランチへのコミットをトリガーに起動|
-
-#### CloudFormation
 
 以下を参考にテンプレートを作成。
 
@@ -301,8 +293,8 @@ CodeCommitへのアクセスにはいくつかの選択肢がある。
 
 Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
 
-- [Private Repositories](https://argoproj.github.io/argo-cd/user-guide/private-repositories/)
-- [Secret Management](https://argoproj.github.io/argo-cd/operator-manual/secret-management/)
+- [Private Repositories](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/)
+- [Secret Management](https://argo-cd.readthedocs.io/en/stable/operator-manual/secret-management/)
 
 Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
 
@@ -344,7 +336,7 @@ aws iam create-service-specific-credential \
 
 ## stagingクラスターの作成
 
-今回、アプリケーションのmasterブランチ＝stagingクラスター、productionブランチ＝productionクラスターという構成にする。
+今回、アプリケーションの`main`ブランチ＝stagingクラスター、`production`ブランチ＝productionクラスターという構成にする。
 
 ### クラスターの作成
 
@@ -381,8 +373,6 @@ eksctl utils associate-iam-oidc-provider \
 
 このサンプルアプリケーションはDynamoDBにアクセスするので、IRSAで`backend`のPodに適切な権限を設定する必要がある。
 
-##### Cloudformation
-
 テーブルとIAMロールを作成する。ServiceAccountのマニフェストではアノテーションでこのIAMロールを指定し、DeploymentのマニフェストではServiceAccountを指定する。
 
 ```sh
@@ -402,8 +392,6 @@ aws cloudformation deploy \
 
 [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)が使用するIAMロールを作成する。
 
-##### Cloudformation
-
 IAMロールを作成する。
 
 ```sh
@@ -418,8 +406,6 @@ aws cloudformation deploy \
 #### Kubernetes External Secrets
 
 [Kubernetes External Secrets](https://github.com/external-secrets/kubernetes-external-secrets)が使用するIAMロールを作成する。
-
-##### Cloudformation
 
 IAMロールを作成する。
 
@@ -446,8 +432,6 @@ aws secretsmanager create-secret \
 #### Container Insights
 
 [Container Insights](https://docs.aws.amazon.com/ja_jp/AmazonCloudWatch/latest/monitoring/deploy-container-insights-EKS.html)が使用するIAMロールを作成する。
-
-##### Cloudformation
 
 IAMロールを作成する。
 
@@ -559,7 +543,7 @@ Necoだと、以下がApp of Appsのディレクトリとなっており参考�
 App of AppsのApplicationを作成する。
 
 ```sh
-branch=master
+branch=main
 # branch=production
 ssh_key_id=$(aws iam list-ssh-public-keys --user-name argocd | jq -r '.SSHPublicKeys[].SSHPublicKeyId')
 argocd app create apps \
@@ -627,7 +611,7 @@ stagingクラスターと同じ作業をクラスター名を変えて実施す�
 
 ## 補足
 
-### CodeBuildからプルリクを作成する
+### CodeBuildからのプルリク作成
 
 以下が参考になる。
 
