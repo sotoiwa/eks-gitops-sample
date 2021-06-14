@@ -67,15 +67,16 @@ Resources:
                 Action:
                   - securityhub:BatchImportFindings
                 Resource:
-                  - !Sub arn:aws:securityhub:${AWS::Region}:${AWS::AccountId}:product/aquasecurity/aquasecurity
+                  - !Sub arn:aws:securityhub:${AWS::Region}::product/aquasecurity/aquasecurity
               - Effect: Allow
                 Action:
                   - codecommit:GitPull
                   - codecommit:GitPush
                   - codecommit:CreatePullRequest
-                  - MergePullRequestByFastForward
-                  - MergePullRequestBySquash
-                  - MergePullRequestByThreeWay
+                  - codecommit:MergePullRequestByFastForward
+                  - codecommit:MergePullRequestBySquash
+                  - codecommit:MergePullRequestByThreeWay
+                  - codecommit:DeleteBranch
                 Resource:
                   - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:*
   CodeBuildProject:

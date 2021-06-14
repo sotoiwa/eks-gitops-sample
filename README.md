@@ -239,17 +239,17 @@ backend_ecr=$(aws ecr describe-repositories --repository-names backend --query '
 
 |パイプライン名|用途|
 |---|---|
-|frontend-master-pipeline|frontendリポジトリのmasterブランチへのコミットをトリガーに起動|
-|backend-master-pipeline|backendリポジトリのmasterブランチへのコミットをトリガーに起動|
-|frontend-production-pipeline|frontendリポジトリのmasterブランチへのコミットをトリガーに起動|
-|backend-procution-pipeline|backendリポジトリのmasterブランチへのコミットをトリガーに起動|
+|frontend-main-pipeline|frontendリポジトリの`main`ブランチへのコミットをトリガーに起動|
+|backend-main-pipeline|backendリポジトリの`main`ブランチへのコミットをトリガーに起動|
+|frontend-production-pipeline|frontendリポジトリの`production`ブランチへのコミットをトリガーに起動|
+|backend-procution-pipeline|backendリポジトリの`production`ブランチへのコミットをトリガーに起動|
 
 CodeBuildプロジェクトは環境毎に共有し、2つ作成する。
 
 |CodeBuildプロジェクト名|用途|
 |---|---|
-|frontend-build|frontendリポジトリのmasterブランチへのコミットをトリガーに起動|
-|backend-build|backendリポジトリのmasterブランチへのコミットをトリガーに起動|
+|frontend-build|frontendアプリケーションのイメージビルド|
+|backend-build|backendアプリケーションのイメージビルド用|
 
 以下を参考にテンプレートを作成。
 
@@ -270,13 +270,13 @@ CodeBuildプロジェクトを作成する。プロジェクトはアプリケ�
 プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに環境変数で環境を渡すようにしている。
 
 ```sh
-docker_hub_secret=$(aws secretsmanager list-secrets | jq -r '.SecretList[] | select( .Name == "dockerhub" ) | .ARN')
+dockerhub_secret=$(aws secretsmanager list-secrets | jq -r '.SecretList[] | select( .Name == "dockerhub" ) | .ARN')
 aws cloudformation deploy \
   --stack-name gitops-frontend-codebuild-stack \
   --template-file cfn/codebuild.yaml \
   --parameter-overrides CodeBuildProjectName=frontend-build \
       CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
-      DockerHubSecret=${docker_hub_secret} \
+      DockerHubSecret=${dockerhub_secret} \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
@@ -331,7 +331,7 @@ aws cloudformation deploy \
 ビルドパイプラインを手動実行する場合は以下のコマンドで実行できるが、同じコミットからCodeBuildによって作成された別のブランチがinfraリポジトリにあると失敗するのでブランチを削除してから実施する。
 
 ```sh
-aws codepipeline start-pipeline-execution --name frontend-master-pipeline
+aws codepipeline start-pipeline-execution --name frontend-main-pipeline
 ```
 ## stagingクラスターの作成
 
@@ -527,9 +527,9 @@ argocd repo add ${infra_codecommit_http} --username <username> --password <passw
 
 |リポジトリ名|ブランチ戦略|
 |---|---|
-|frontend|masterブランチをstaging環境、productionブランチをproduction環境にデプロイ|
-|backend|masterブランチをstaging環境、productionブランチをproduction環境にデプロイ|
-|infra|masterブランチのみを使用し、各環境の差分のファイルはディレクトリ毎に保持|
+|frontend|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイ|
+|backend|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイ|
+|infra|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイする。さらに各環境の差分もディレクトリ毎に保持する|
 
 また、App of Apps構成とし、infraリポジトリのappディレクトリにArgo CDのApplicationリソースの定義を格納する。
 
@@ -537,7 +537,7 @@ argocd repo add ${infra_codecommit_http} --username <username> --password <passw
 
 Necoだと、以下がApp of Appsのディレクトリとなっており参考になる。
 
-- [https://github.com/cybozu-go/neco-apps/tree/master/argocd-config/base](https://github.com/cybozu-go/neco-apps/tree/master/argocd-config/base)
+- [https://github.com/cybozu-go/neco-apps/tree/main/argocd-config/base](https://github.com/cybozu-go/neco-apps/tree/main/argocd-config/base)
 
 App of AppsのApplicationを作成する。
 
