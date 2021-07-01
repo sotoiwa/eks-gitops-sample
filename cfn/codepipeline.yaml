@@ -76,7 +76,7 @@ Resources:
               ActionTypeId:
                 Category: Source
                 Owner: AWS
-                Version: 1
+                Version: "1"
                 Provider: CodeCommit
               OutputArtifacts:
                 - Name: SourceArtifact
@@ -91,7 +91,7 @@ Resources:
               ActionTypeId:
                 Category: Build
                 Owner: AWS
-                Version: 1
+                Version: "1"
                 Provider: CodeBuild
               InputArtifacts:
                 - Name: SourceArtifact

@@ -289,9 +289,9 @@ CodeBuildプロジェクトを作成する。プロジェクトはアプリケ�
 プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに`PIPELINE_BRANCH_NAME`という環境変数でブランチ名を渡すようにしている。
 
 ```sh
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+codepipeline_artifactstore_bucket="codepipeline-artifactstore-${AWS_ACCOUNT_ID}"
 for app in frontend backend; do
-  AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-  codepipeline_artifactstore_bucket="codepipeline-artifactstore-${AWS_ACCOUNT_ID}"
   dockerhub_secret=$(aws secretsmanager list-secrets | jq -r '.SecretList[] | select( .Name == "dockerhub" ) | .ARN')
   aws cloudformation deploy \
     --stack-name gitops-${app}-codebuild-stack \
@@ -306,6 +306,8 @@ done
 CodePipelineを作成する。パイプラインはアプリケーション毎かつ環境毎に作成する。つまり4つ作成する。
 
 ```sh
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+codepipeline_artifactstore_bucket="codepipeline-artifactstore-${AWS_ACCOUNT_ID}"
 for branch in main production; do
   for app in frontend backend; do
     aws cloudformation deploy \
