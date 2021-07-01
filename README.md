@@ -447,11 +447,11 @@ OICDプロバイダーはクラスターの作成時に有効化済み。
 for cluster_name in staging production; do
   oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
   aws cloudformation deploy \
-    --stack-name gitops-dynamodb-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-dynamodb-stack \
     --template-file cfn/dynamodb.yaml \
     --parameter-overrides ClusterName=${cluster_name}
   aws cloudformation deploy \
-    --stack-name gitops-backend-iam-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-backend-iam-stack \
     --template-file cfn/backend-iam.yaml \
     --parameter-overrides ClusterName=${cluster_name} NamespaceName=backend ServiceAccountName=backend OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
@@ -468,7 +468,7 @@ IAMロールを作成する。
 for cluster_name in staging production; do
   oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
   aws cloudformation deploy \
-    --stack-name gitops-aws-load-balancer-controller-iam-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-aws-load-balancer-controller-iam-stack \
     --template-file cfn/aws-load-balancer-controller-iam.yaml \
     --parameter-overrides ClusterName=${cluster_name} NamespaceName=kube-system ServiceAccountName=aws-load-balancer-controller OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
@@ -485,7 +485,7 @@ IAMロールを作成する。
 for cluster_name in staging production; do
   oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
   aws cloudformation deploy \
-    --stack-name gitops-external-secrets-iam-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-external-secrets-iam-stack \
     --template-file cfn/external-secrets-iam.yaml \
     --parameter-overrides ClusterName=${cluster_name} NamespaceName=external-secrets ServiceAccountName=external-secrets OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
@@ -513,12 +513,12 @@ IAMロールを作成する。
 for cluster_name in staging production; do
   oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
   aws cloudformation deploy \
-    --stack-name gitops-cloudwatch-agent-iam-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-cloudwatch-agent-iam-stack \
     --template-file cfn/cloudwatch-agent-iam.yaml \
     --parameter-overrides ClusterName=${cluster_name} NamespaceName=amazon-cloudwatch ServiceAccountName=cloudwatch-agent OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
   aws cloudformation deploy \
-    --stack-name gitops-fluent-bit-iam-${cluster_name}-stack \
+    --stack-name gitops-${cluster_name}-fluent-bit-iam-stack \
     --template-file cfn/fluent-bit-iam.yaml \
     --parameter-overrides ClusterName=${cluster_name} NamespaceName=amazon-cloudwatch ServiceAccountName=fluent-bit OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
