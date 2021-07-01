@@ -9,5 +9,5 @@ __pycache__/
 cdk.out/
 id_rsa*
 trust.json*
-iam-policy.json*
+*policy.json*
 .dockerconfigjson
