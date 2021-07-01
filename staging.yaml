@@ -5,23 +5,20 @@ metadata:
   name: staging
   region: ap-northeast-1
   version: "1.20"
+
 vpc:
-  cidr: "10.2.0.0/16"
-
-availabilityZones:
-  - ap-northeast-1a
-  - ap-northeast-1c
-
-managedNodeGroups:
-  - name: managed-ng-1
-    minSize: 2
-    maxSize: 2
-    desiredCapacity: 2
-    ssh:
-      allow: true
-      publicKeyName: default
-      enableSsm: true
-    privateNetworking: true
+  id: vpc-0be6ec61c0615640f
+  subnets:
+    public:
+      ap-northeast-1a:
+          id: subnet-0082a777db9e2c323
+      ap-northeast-1c:
+          id: subnet-0557418851a60ebae
+    private:
+      ap-northeast-1a:
+          id: subnet-00ae15e7ef85b18f4
+      ap-northeast-1c:
+          id: subnet-0990c739a11cec49c
 
 cloudWatch:
   clusterLogging:

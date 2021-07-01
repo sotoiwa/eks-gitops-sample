@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: XXXX_AWS_ACCOUNT_ID_XXXX.dkr.ecr.ap-northeast-1.amazonaws.com/frontend:8b40ef7
+        image: XXXX_AWS_ACCOUNT_ID_XXXX.dkr.ecr.ap-northeast-1.amazonaws.com/frontend:e2fe374
