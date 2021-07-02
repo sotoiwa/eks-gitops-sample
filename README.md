@@ -558,6 +558,12 @@ export ARGOCD_OPTS='--port-forward-namespace argocd'
 argocd login ${argocd_server} --username admin --password ${argocd_pwd} --insecure
 ```
 
+パスワードを確認して http://localhost:8080 からアクセスも可能。
+
+```she
+echo ${argocd_pwd}
+```
+
 #### CodeCommitリポジトリの登録
 
 CodeCommitリポジトリを登録する。
