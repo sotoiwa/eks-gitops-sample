@@ -455,7 +455,7 @@ for cluster_name in staging production; do
   aws cloudformation deploy \
     --stack-name gitops-${cluster_name}-backend-iam-stack \
     --template-file cfn/backend-iam.yaml \
-    --parameter-overrides ClusterName=${cluster_name} NamespaceName=backend ServiceAccountName=backend OidcProvider=${oidc_provider} \
+    --parameter-overrides TableName=messages-${cluster_name%%-*} ClusterName=${cluster_name} NamespaceName=backend ServiceAccountName=backend OidcProvider=${oidc_provider} \
     --capabilities CAPABILITY_NAMED_IAM
 done
 ```
@@ -558,7 +558,7 @@ export ARGOCD_OPTS='--port-forward-namespace argocd'
 argocd login ${argocd_server} --username admin --password ${argocd_pwd} --insecure
 ```
 
-パスワードを確認して http://localhost:8080 からアクセスも可能。
+パスワードを確認して[http://localhost:8080](http://localhost:8080)からアクセスも可能。
 
 ```she
 echo ${argocd_pwd}
@@ -587,6 +587,8 @@ ssh_key_id=$(aws iam list-ssh-public-keys --user-name argocd | jq -r '.SSHPublic
 argocd repo add ssh://${ssh_key_id}@git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/infra \
   --ssh-private-key-path ./id_rsa
 ```
+
+失敗する場合も何度か繰り返すと上手くいく場合がある。
 
 確認する。
 

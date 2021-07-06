@@ -83,6 +83,9 @@ def delete_message(message_uuid):
 def health_check():
     return 'OK'
 
+@app.route('/env', methods=['GET'])
+def env():
+    return dict(os.environ)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

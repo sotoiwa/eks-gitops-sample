@@ -1,6 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
+  TableName:
+    Description: DynamoDB table name
+    Type: String
   ClusterName:
     Description: EKS cluster name
     Type: String
@@ -65,4 +68,4 @@ Resources:
                   - dynamodb:Update*
                   - dynamodb:PutItem
                 Resource:
-                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/messages-${ClusterName}
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}

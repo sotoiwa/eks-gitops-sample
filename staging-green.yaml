@@ -1,0 +1,28 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: staging-green
+  region: ap-northeast-1
+  version: "1.20"
+
+vpc:
+  id: vpc-0be6ec61c0615640f
+  subnets:
+    public:
+      ap-northeast-1a:
+          id: subnet-0082a777db9e2c323
+      ap-northeast-1c:
+          id: subnet-0557418851a60ebae
+    private:
+      ap-northeast-1a:
+          id: subnet-00ae15e7ef85b18f4
+      ap-northeast-1c:
+          id: subnet-0990c739a11cec49c
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["*"]
+
+iam:
+  withOIDC: true
