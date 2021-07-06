@@ -105,7 +105,7 @@ phases:
       - docker push ${ECR_REPOSITORY_URI}:latest
       - docker push ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
 
-      # プルリクエストの作成
+      # mainブランチへのマージのプルリクエストを作成する
       - INFRA_CODECOMMIT_REPOSITORY_URI=https://git-codecommit.${AWS_DEFAULT_REGION}.amazonaws.com/v1/repos/${INFRA_CODECOMMIT_REPOSITORY_NAME}
       - git config --global user.email "ci-build@example.com"
       - git config --global user.name "ci-build"
@@ -129,13 +129,12 @@ phases:
           --description "${PR_MSG}" \
           --targets "repositoryName=${INFRA_CODECOMMIT_REPOSITORY_NAME},sourceReference=${NEW_BRANCH_NAME},destinationReference=${STAGING_BRANCH_NAME}" \
           --query 'pullRequest.pullRequestId' --output text)
-      # ステージング環境ではマージまで実施
+      # mainブランチへマージする
+      # productionへのデプロイについては、productionへのマージが別途必要
       - |
-        if [ "${PIPELINE_BRANCH_NAME}" = "${STAGING_BRANCH_NAME}" ]; then
-          aws codecommit merge-pull-request-by-fast-forward \
-            --pull-request-id ${pull_request_id} \
-            --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME}
-          aws codecommit delete-branch  \
-            --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME} \
-            --branch-name ${NEW_BRANCH_NAME}
-        fi
+        aws codecommit merge-pull-request-by-fast-forward \
+          --pull-request-id ${pull_request_id} \
+          --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME}
+        aws codecommit delete-branch  \
+          --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME} \
+          --branch-name ${NEW_BRANCH_NAME}

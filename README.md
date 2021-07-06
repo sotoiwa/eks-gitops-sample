@@ -588,7 +588,7 @@ argocd repo add ssh://${ssh_key_id}@git-codecommit.ap-northeast-1.amazonaws.com/
   --ssh-private-key-path ./id_rsa
 ```
 
-失敗する場合も何度か繰り返すと上手くいく場合がある。
+SSH host keyが認識されるまでに時間がかかるのか、失敗する場合は少しだけ待ってからやると上手くいく。
 
 確認する。
 

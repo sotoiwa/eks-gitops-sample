@@ -105,6 +105,7 @@ done
 - ターゲットグループのARN
 - App of Appsから参照する各Applicationのパス
 - AWS Load Balancer Controllerで指定しているクラスター名の引数
+- frontendアプリケーションの環境変数に設定しているクラスター名
 
 マニフェストをmainブランチにコミットする。
 
@@ -130,11 +131,11 @@ git checkout -b production-green
 git push origin production-green
 ```
 
-## ArgoCDのデプロイ
+## アプリケーションのデプロイ
 
 以降の作業はstaging、productionのクラスターで実施した作業とほぼ同じ。
 
-kubectlのコンテキストをstaging-green、production-greenクラスターに向けほぼ同じ作業を実施するが、App of Appsのパスとブランチを変える。
+kubectlのコンテキストをstaging-green、production-greenクラスターに向けほぼ同じ作業を実施する。App of Appsのパスとブランチは変える必要があるので注意。
 
 ```sh
 cluster_name=staging-green
@@ -152,4 +153,76 @@ argocd app create apps \
   --auto-prune
 ```
 
-これでデプロイ完了。
+これでデプロイ完了。各環境のデプロイメントが正常であることを確認する。
+
+# Blue/Greenの確認
+
+ALBのホストの`/env`にアクセスする。環境変数でルーティングされたクラスターが確認できる。
+
+```shell
+$ curl -s http://staging-alb-1547022616.ap-northeast-1.elb.amazonaws.com/env | jq -r '.EKS_CLUSTER_NAME'
+staging
+```
+
+テストリスナー経由のアクセスも確認する。
+
+```shell
+$ curl -s http://staging-alb-1547022616.ap-northeast-1.elb.amazonaws.com:8080/env | jq -r '.EKS_CLUSTER_NAME'
+staging-green
+```
+
+ALBのリスナーの振り分けルールを50:50に変える。
+
+```shell
+for cluster_name in staging production; do
+  vpc_id=$(aws ec2 describe-vpcs --filter "Name=tag:Name,Values=gitops-${cluster_name}-vpc-stack-VPC" --query "Vpcs[*].VpcId" --output text)
+  public_subnet_01=$(aws ec2 describe-subnets --filter "Name=tag:Name,Values=gitops-${cluster_name}-vpc-stack-PublicSubnet01" --query "Subnets[*].SubnetId" --output text)
+  public_subnet_02=$(aws ec2 describe-subnets --filter "Name=tag:Name,Values=gitops-${cluster_name}-vpc-stack-PublicSubnet02" --query "Subnets[*].SubnetId" --output text)
+  aws cloudformation deploy \
+    --stack-name gitops-${cluster_name}-alb-stack \
+    --template-file cfn/alb.yaml \
+    --parameter-overrides ClusterName=${cluster_name} VpcId=${vpc_id} PublicSubnet01=${public_subnet_01} PublicSubnet02=${public_subnet_02} \
+        BlueTargetGroupWeight=50 GreenTargetGroupWeight=50
+done
+```
+
+再びテストする。
+
+```shell
+while true; do
+  curl -s http://staging-alb-1547022616.ap-northeast-1.elb.amazonaws.com/env | jq -r '.EKS_CLUSTER_NAME'
+  sleep 2
+done
+```
+
+```shell
+$ while true; do
+>   curl -s http://staging-alb-1547022616.ap-northeast-1.elb.amazonaws.com/env | jq -r '.EKS_CLUSTER_NAME'
+>   sleep 2
+> done
+staging-green
+staging-green
+staging-green
+staging
+staging
+staging-green
+staging-green
+staging-green
+staging-green
+staging-green
+staging-green
+staging
+staging-green
+staging
+staging-green
+staging-green
+staging
+staging
+staging
+staging-green
+staging
+staging
+^C
+```
+
+以上で完了。

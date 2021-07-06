@@ -13,6 +13,14 @@ Parameters:
   PublicSubnet02:
     Description: Second public subnet
     Type: String
+  BlueTargetGroupWeight:
+    Description: Weight to route blue target group
+    Type: String
+    Default: 100
+  GreenTargetGroupWeight:
+    Description: Weight to route Green target group
+    Type: String
+    Default: 0
 Resources:
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -24,6 +32,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
           CidrIp: "0.0.0.0/0"
       Tags:
         - Key: Name
@@ -51,6 +63,17 @@ Resources:
             ContentType: text/plain
             StatusCode: "404"
       LoadBalancerArn: !Ref InternetALB
+  ALBListenerTestHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Port: 8080
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            StatusCode: "404"
+      LoadBalancerArn: !Ref InternetALB
   ALBListenerHTTPRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -59,15 +82,31 @@ Resources:
           ForwardConfig:
             TargetGroups:
               - TargetGroupArn: !Ref ALBTargetGroupBlue
-                Weight: 100
+                Weight: !Ref BlueTargetGroupWeight
               - TargetGroupArn: !Ref ALBTargetGroupGreen
-                Weight: 0
+                Weight: !Ref GreenTargetGroupWeight
       Conditions:
         - Field: path-pattern
           PathPatternConfig:
             Values:
               - "/*"
       ListenerArn: !Ref ALBListenerHTTP
+      Priority: 1
+  ALBListenerTestHTTPRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref ALBTargetGroupGreen
+                Weight: 1
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - "/*"
+      ListenerArn: !Ref ALBListenerTestHTTP
       Priority: 1
   ALBTargetGroupBlue:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
