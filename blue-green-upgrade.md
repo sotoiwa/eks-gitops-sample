@@ -103,7 +103,7 @@ done
 
 - IRSAで使用するIAMロールのARN
 - ターゲットグループのARN
-- App of Appsから参照する各Applicationのパス
+- App of Appsから参照する各ApplicationのpathとtargetRevision
 - AWS Load Balancer Controllerで指定しているクラスター名の引数
 - frontendアプリケーションの環境変数に設定しているクラスター名
 
