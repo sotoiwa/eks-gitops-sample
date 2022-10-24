@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  CodeBuildProjectName:
+    Description: CodeBuild project name
+    Type: String
+  CodeCommitRepositoryName:
+    Description: CodeCommit repository name
+    Type: String
+  CodeBuildArtifactStoreBucketName:
+    Description: CodeBuild artifact store bucket name
+    Type: String
+  BuildSpecPath:
+    Description: Path of BuildSpec
+    Type: String
+  DockerHubSecret:
+    Description: Secret ARN for Docker Hub
+    Type: String
+
+Resources:
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub CodeBuildServiceRole-${CodeBuildProjectName}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+      Policies:
+        - PolicyName: CodeBuildBasePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProjectName}
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProjectName}:*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub arn:aws:s3:::${CodeBuildArtifactStoreBucketName}
+                  - !Sub arn:aws:s3:::${CodeBuildArtifactStoreBucketName}/*
+              - Effect: Allow
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                Resource:
+                  - !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/${CodeBuildProjectName}-*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:dockerhub-*
+              - Effect: Allow
+                Action:
+                  - codecommit:GitPull
+                  - codecommit:PostCommentForPullRequest
+                Resource:
+                  - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${CodeCommitRepositoryName}
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${CodeBuildProjectName}
+      ServiceRole: !Sub ${CodeBuildServiceRole.Arn}
+      Source:
+        Type: CODECOMMIT
+        Location: !Sub https://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/${CodeCommitRepositoryName}
+        BuildSpec: !Sub ${BuildSpecPath}
+      Artifacts:
+        Type: S3
+        Location: !Sub ${CodeBuildArtifactStoreBucketName}
+        NamespaceType: BUILD_ID
+        Packaging: NONE
+        EncryptionDisabled: false
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: DOCKERHUB_USER
+            Type: SECRETS_MANAGER
+            Value: !Sub ${DockerHubSecret}:username
+          - Name: DOCKERHUB_PASS
+            Type: SECRETS_MANAGER
+            Value: !Sub ${DockerHubSecret}:password
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+        S3Logs:
+          Status: DISABLED
+  AmazonCloudWatchEventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cwe-start-build
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: !Sub ${CodeBuildProject.Arn}
+  AmazonCloudWatchEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${CodeCommitRepositoryName}-pull-request-state-change
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - CodeCommit Pull Request State Change
+        resources:
+          - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${CodeCommitRepositoryName}
+        detail:
+          event:
+            - pullRequestCreated
+            - pullRequestSourceBranchUpdated
+          destinationReference:
+            - refs/heads/main
+            - refs/heads/production
+      Targets:
+        - Arn: !Sub ${CodeBuildProject.Arn}
+          RoleArn: !Sub ${AmazonCloudWatchEventRole.Arn}
+          Id: !Sub codebuild-${CodeBuildProject}
+          InputTransformer:
+            InputPathsMap:
+              destination_commit_id: "$.detail.destinationCommit"
+              destination_reference: "$.detail.destinationReference"
+              source_version: "$.detail.sourceReference"
+              source_commit_id: "$.detail.sourceCommit"
+              pull_request_id: "$.detail.pullRequestId"
+              repository_name: "$.detail.repositoryNames[0]"
+            InputTemplate: |
+              {
+                "sourceVersion": "<source_version>",
+                "environmentVariablesOverride": [
+                  {
+                    "name": "REPOSITORY_NAME",
+                    "value": "<repository_name>"
+                  },
+                  {
+                    "name": "PULL_REQUEST_ID",
+                    "value": "<pull_request_id>"
+                  },
+                  {
+                    "name": "DESTINATION_COMMIT_ID",
+                    "value": "<destination_commit_id>"
+                  },
+                  {
+                    "name": "DESTINATION_REFERENCE",
+                    "value": "<destination_reference>"
+                  },
+                  {
+                    "name": "SOURCE_COMMIT_ID",
+                    "value": "<source_commit_id>"
+                  }
+                ]
+              }

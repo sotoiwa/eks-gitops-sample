@@ -18,6 +18,8 @@ rules:
       - namespaces
       - pods
       - pods/logs
+      - nodes
+      - nodes/proxy
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -76,7 +78,6 @@ data:
         Rotate_Wait         30
         storage.type        filesystem
         Read_from_Head      ${READ_FROM_HEAD}
-
     [INPUT]
         Name                tail
         Tag                 application.*
@@ -87,7 +88,6 @@ data:
         Skip_Long_Lines     On
         Refresh_Interval    10
         Read_from_Head      ${READ_FROM_HEAD}
-
     [INPUT]
         Name                tail
         Tag                 application.*
@@ -101,7 +101,6 @@ data:
         Skip_Long_Lines     On
         Refresh_Interval    10
         Read_from_Head      ${READ_FROM_HEAD}
-
     [FILTER]
         Name                kubernetes
         Match               application.*
@@ -113,7 +112,9 @@ data:
         K8S-Logging.Exclude Off
         Labels              Off
         Annotations         Off
-
+        Use_Kubelet         On
+        Kubelet_Port        10250
+        Buffer_Size         0
     [OUTPUT]
         Name                cloudwatch_logs
         Match               application.*
@@ -122,7 +123,6 @@ data:
         log_stream_prefix   ${HOST_NAME}-
         auto_create_group   true
         extra_user_agent    container-insights
-
   dataplane-log.conf: |
     [INPUT]
         Name                systemd
@@ -132,7 +132,6 @@ data:
         DB                  /var/fluent-bit/state/systemd.db
         Path                /var/log/journal
         Read_From_Tail      ${READ_FROM_TAIL}
-
     [INPUT]
         Name                tail
         Tag                 dataplane.tail.*
@@ -148,7 +147,6 @@ data:
         Rotate_Wait         30
         storage.type        filesystem
         Read_from_Head      ${READ_FROM_HEAD}
-
     [FILTER]
         Name                modify
         Match               dataplane.systemd.*
@@ -156,12 +154,10 @@ data:
         Rename              _SYSTEMD_UNIT               systemd_unit
         Rename              MESSAGE                     message
         Remove_regex        ^((?!hostname|systemd_unit|message).)*$
-
     [FILTER]
         Name                aws
         Match               dataplane.*
         imds_version        v1
-
     [OUTPUT]
         Name                cloudwatch_logs
         Match               dataplane.*
@@ -182,7 +178,6 @@ data:
         Skip_Long_Lines     On
         Refresh_Interval    10
         Read_from_Head      ${READ_FROM_HEAD}
-
     [INPUT]
         Name                tail
         Tag                 host.messages
@@ -193,7 +188,6 @@ data:
         Skip_Long_Lines     On
         Refresh_Interval    10
         Read_from_Head      ${READ_FROM_HEAD}
-
     [INPUT]
         Name                tail
         Tag                 host.secure
@@ -204,12 +198,10 @@ data:
         Skip_Long_Lines     On
         Refresh_Interval    10
         Read_from_Head      ${READ_FROM_HEAD}
-
     [FILTER]
         Name                aws
         Match               host.*
         imds_version        v1
-
     [OUTPUT]
         Name                cloudwatch_logs
         Match               host.*
@@ -218,28 +210,24 @@ data:
         log_stream_prefix   ${HOST_NAME}.
         auto_create_group   true
         extra_user_agent    container-insights
-
   parsers.conf: |
     [PARSER]
         Name                docker
         Format              json
         Time_Key            time
         Time_Format         %Y-%m-%dT%H:%M:%S.%LZ
-
     [PARSER]
         Name                syslog
         Format              regex
         Regex               ^(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$
         Time_Key            time
         Time_Format         %b %d %H:%M:%S
-
     [PARSER]
         Name                container_firstline
         Format              regex
         Regex               (?<log>(?<="log":")\S(?!\.).*?)(?<!\\)".*(?<stream>(?<="stream":").*?)".*(?<time>\d{4}-\d{1,2}-\d{1,2}T\d{2}:\d{2}:\d{2}\.\w*).*(?=})
         Time_Key            time
         Time_Format         %Y-%m-%dT%H:%M:%S.%LZ
-
     [PARSER]
         Name                cwagent_firstline
         Format              regex
@@ -269,7 +257,7 @@ spec:
     spec:
       containers:
       - name: fluent-bit
-        image: amazon/aws-for-fluent-bit:2.10.0
+        image: public.ecr.aws/aws-observability/aws-for-fluent-bit:stable
         imagePullPolicy: Always
         env:
             - name: AWS_REGION
@@ -306,8 +294,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
             - name: CI_VERSION
-              value: "k8s/1.3.6"
+              value: "k8s/1.3.11"
         resources:
             limits:
               memory: 200Mi
@@ -333,6 +326,8 @@ spec:
           mountPath: /var/log/dmesg
           readOnly: true
       terminationGracePeriodSeconds: 10
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       volumes:
       - name: fluentbitstate
         hostPath:

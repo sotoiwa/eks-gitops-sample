@@ -1,6 +1,6 @@
 # eks-gitops-sample
 
-EKSで以下のスタックを使ったGitOpsのサンプル構成を作成する。
+EKS で以下のスタックを使った GitOps のサンプル構成を作成する。
 
 |役割|ツール|
 |---|---|
@@ -9,7 +9,7 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 |CD|Argo CD + Kustomize|
 |イメージレジストリ|ECR|
 
-シングルアカウントの中にStagingとProductionのクラスターを構成する。
+シングルアカウントの中に Staging と Production のクラスターを構成する。
 
 ![](./architecture.drawio.svg)
 
@@ -17,24 +17,25 @@ EKSで以下のスタックを使ったGitOpsのサンプル構成を作成す�
 
 |コンポーネント|バージョン|
 |---|---|
-|Kubernetes バージョン|1.20|
-|Argo CD|v2.0.4|
-|AWS Load Balancer Controller|v2.2.0|
-|Kubernetes External Secrets|7.2.1|
+|Kubernetes バージョン|1.24|
+|Argo CD|v2.4.15|
+|Cert Manager|v1.5.4|
+|AWS Load Balancer Controller|v2.4.4|
+|External Secrets Operator|0.6.0|
 
 ## 参考リンク
 
 - [GitOpsで絶対に避けて通れないブランチ戦略](https://amaya382.hatenablog.jp/entry/2019/12/02/192159)
 - [Argo CDによる継続的デリバリーのベストプラクティスとその実装](https://blog.cybozu.io/entry/2019/11/21/100000)
-- [https://github.com/cybozu-go/neco-apps](https://github.com/cybozu-go/neco-apps)
 
 ## パイプラインの構築
 
-GitOpsでCIとCDは分離するので、CIを行うパイプラインを最初に作成する。
+GitOps で CI と CD は分離するので、CI を行うパイプラインを最初に作成する。
 
-### Docker Hubのクレデンシャル作成
+### Docker Hub のクレデンシャル作成
 
-レートリミットを回避するため、CodeBuildではDocker Hubにログインする。そのためのユーザー名とパスワードをSecrets Managerに格納しておく。
+Docker Hub のレートリミットを回避するため、CodeBuild では Docker Hub にログインする。そのためのユーザー名とパスワードを Secrets Manager に格納しておく。
+なお、ECR 経由で Docker Hub の公式イメージをプルすることも可能なので、そちらでもよいが、imagePullSecret の使い方の確認のためこの方式とする。
 
 ```sh
 aws secretsmanager create-secret \
@@ -43,50 +44,51 @@ aws secretsmanager create-secret \
   --secret-string '{"username":"hogehoge","password":"fugafuga"}'
 ```
 
-クラスター上でもDocker Hubからのイメージ取得がレートリミットに引っかかることがあるため、imagePullSecretとして使用するためのdockerconfigjsonを作成しておく。
+クラスター上でも Docker Hub からのイメージ取得がレートリミットに引っかかることがあるため、imagePullSecret として使用するための dockerconfigjson を作成しておく。
 
 ```sh
 dockerconfigjson=$(kubectl create secret docker-registry mysecret \
   --docker-server=https://index.docker.io/v1/ \
-  --docker-username=hogehoge \
-  --docker-password=fugafuga --dry-run=client -o json \
+  --docker-username="hogehoge" \
+  --docker-password="fugafuga" --dry-run=client -o json \
   | jq -r '.data.".dockerconfigjson"' | base64 --decode)
+echo ${dockerconfigjson}
 aws secretsmanager create-secret \
   --region ap-northeast-1 \
   --name dockerconfigjson \
   --secret-string ${dockerconfigjson}
 ```
 
-### SecurityHubでのTrivyの統合
+### SecurityHub での Trivy の統合
 
-SeurityHubでTrivyの結果を受け入れるように設定する。Aquaとの統合を有効化する。
+SeurityHub で Trivy の結果を受け入れるように設定する。Aqua との統合を有効化する。
 
 ```shell
 aws securityhub enable-import-findings-for-product --product-arn arn:aws:securityhub:ap-northeast-1::product/aquasecurity/aquasecurity
 ```
 
-### Argo CD用のIAMユーザーの作成
+### Argo CD 用の IAM ユーザーの作成
 
-Argo CDがCodeCommitにアクセスするためのIAMユーザーを作成する。クラスターごとにIAMユーザーを分けてもよいが、今回はユーザーを共用するので、この操作は1回だけ実施する。
+Argo CD が CodeCommit にアクセスするための IAM ユーザーを作成する。クラスターごとに IAM ユーザーを分けてもよいが、今回はユーザーを共用するので、この操作は 1 回だけ実施する。
 
-CodeCommitへのアクセスにはいくつかの選択肢がある。
+CodeCommit へのアクセスにはいくつかの選択肢がある。
 
 - [Git 認証情報を使用する HTTPS ユーザー用のセットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-gc.html)
-  - IAMユーザーに関連付けられたユーザー名とパスワードを使用する方法
+  - IAM ユーザーに関連付けられたユーザー名とパスワードを使用する方法
 - [AWS CLI を使用していない SSH ユーザーの セットアップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-without-cli.html)
-  - IAMユーザーに関連付けられたSSH公開鍵を使用する方法
+  - IAM ユーザーに関連付けられた SSH キーペアを使用する方法
 - [git-remote-codecommit を使用した AWS CodeCommit への HTTPS 接続の設定手順](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)
-  - gitを拡張するツールで、Git認証情報やSSH公開鍵に登録が不要
-  - git clone codecommit::ap-northeast-1://your-repo-name
+  - git を拡張する CodeCommit 独自のツールで、Git 認証情報や SSH 公開鍵の登録が不要
+  - リポジトリの URI が `codecommit::ap-northeast-1://your-repo-name` のようになる
 - [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
-  - AWS CLIに含まれている認証情報ヘルパーを使う方法
+  - AWS CLI に含まれている認証情報ヘルパーを使う方法
 
-Argo CDではパスワードによるHTTPS接続か鍵によるSSH接続が可能。
+Argo CD ではパスワードによる HTTPS 接続か鍵による SSH 接続が可能。
 
 - [Private Repositories](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/)
 - [Secret Management](https://argo-cd.readthedocs.io/en/stable/operator-manual/secret-management/)
 
-Argo CD用のIAMユーザーを作成し、CodeCommitリポジトの参照権限を与える。
+Argo CD 用の IAM ユーザーを作成し、CodeCommit リポジトの参照権限を与える。
 
 ```sh
 aws iam create-user --user-name argocd
@@ -111,13 +113,13 @@ policy_arn=$(aws iam list-policies --query 'Policies[?PolicyName==`argocd-policy
 aws iam attach-user-policy --user-name argocd --policy-arn ${policy_arn}
 ```
 
-SSH接続の場合はまず鍵ペアを生成する。
+SSH 接続の場合はまず鍵ペアを生成する。
 
 ```sh
-ssh-keygen -t rsa -f ./id_rsa -N '' -C ''
+ssh-keygen -t rsa -b 4096 -f ./id_rsa -N '' -C ''
 ```
 
-公開鍵をIAMユーザーに登録する。
+公開鍵を IAM ユーザーに登録する。
 
 - [upload-ssh-public-key](https://docs.aws.amazon.com/cli/latest/reference/iam/upload-ssh-public-key.html)
 
@@ -127,9 +129,9 @@ aws iam upload-ssh-public-key \
   --ssh-public-key-body file://id_rsa.pub
 ```
 
- （参考）HTTPS接続
+ （参考）HTTPS 接続
 
-HTTPS接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。
+HTTPS 接続の場合は以下コマンドで認証情報を生成する。パスワードはこのときしか表示されないので注意。
 
 - [create-service-specific-credential](https://docs.aws.amazon.com/cli/latest/reference/iam/create-service-specific-credential.html)
 
@@ -141,13 +143,13 @@ aws iam create-service-specific-credential \
 
 ### CodeCommit
 
-CodeCommitリポジトリを3つ作成する。
+CodeCommit リポジトリを3つ作成する。
 
 |リポジトリ名|用途|
 |---|---|
-|frontend|frontendアプリケーションのソースコードとDockerfile格納用リポジトリ|
-|backend|backendアプリケーションのソースコードとDockerfile格納用リポジトリ|
-|infra|Kubernetesマニフェストの格納用リポジトリ|
+|frontend|frontend アプリケーションのソースコードと Dockerfile 格納用リポジトリ|
+|backend|backend アプリケーションのソースコードと Dockerfile 格納用リポジトリ|
+|infra|Kubernetes マニフェストの格納用リポジトリ|
 
 ```sh
 aws cloudformation deploy \
@@ -155,11 +157,11 @@ aws cloudformation deploy \
   --template-file cfn/codecommit.yaml
 ```
 
-### ソースをCodeCommitに登録
+### ソースを CodeCommit に登録
 
-ローカルからのpushについては、[認証情報ヘルパー](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)を使うこともできるが、ここでは[git-remote-codecommit](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html)を使用する。
+ローカルからのプッシュについては、[認証情報ヘルパー](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)を使うこともできるが、ここでは [git-remote-codecommit](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-git-remote-codecommit.html) を使用する。
 
-はじめに、CodeCommitリポジトリのURLを変数に入れておく。
+はじめに、CodeCommit リポジトリの URI を変数に入れておく。
 
 ```sh
 frontend_codecommit_http=$(aws codecommit get-repository --repository-name frontend --query 'repositoryMetadata.cloneUrlHttp' --output text)
@@ -178,35 +180,35 @@ for repo in frontend backend infra; do
 done
 ```
 
-frontendアプリケーションのソースをCodeCommitにpushする。`production`ブランチも作成しておく。
+frontend アプリケーションのソースを CodeCommit にプッシュする。`production` ブランチも作成しておく。
 
 ```sh
 cd frontend/
 git init
+git remote add origin ${frontend_codecommit_grc}
 git add .
 git commit -m "first commit"
-git remote add origin ${frontend_codecommit_grc}
 git push -u origin main
 git checkout -b production
 git push -u origin production
 git checkout main
 ```
 
-backendアプリケーションのソースをCodeCommitにpushする。`production`ブランチも作成しておく。
+backend アプリケーションのソースを CodeCommit にプッシュする。`production` ブランチも作成しておく。
 
 ```sh
 cd ../backend/
 git init
+git remote add origin ${backend_codecommit_grc}
 git add .
 git commit -m "first commit"
-git remote add origin ${backend_codecommit_grc}
 git push -u origin main
 git checkout -b production
 git push -u origin production
 git checkout main
 ```
 
-infraのマニフェストをCodeCommitにpushする。一部のマニフェストにはAWSアカウントIDやSSHキーIDが含まれているので、自身の環境に合わせて一括置換する。`production`ブランチも作成しておく。
+infra のマニフェストを CodeCommit にプッシュする。一部のマニフェストには AWS アカウント ID や SSH キー ID が含まれているので、自身の環境に合わせて一括置換する。`production` ブランチも作成しておく。
 
 ```sh
 cd ../infra/
@@ -215,9 +217,9 @@ ssh_key_id=$(aws iam list-ssh-public-keys --user-name argocd | jq -r '.SSHPublic
 find . -type f -name "*.yaml" -print0 | xargs -0 sed -i "" -e "s/XXXX_AWS_ACCOUNT_ID_XXXX/${AWS_ACCOUNT_ID}/"
 find . -type f -name "*.yaml" -print0 | xargs -0 sed -i "" -e "s/XXXX_SSH_KEY_ID_XXXX/${ssh_key_id}/"
 git init
+git remote add origin ${infra_codecommit_grc}
 git add .
 git commit -m "first commit"
-git remote add origin ${infra_codecommit_grc}
 git push -u origin main
 git checkout -b production
 git push -u origin production
@@ -227,12 +229,12 @@ cd ../
 
 ### ECR
 
-ECRリポジトリを2つ作成する。
+ECR リポジトリを 2 つ作成する。
 
 |リポジトリ名|用途|
 |---|---|
-|frontend|frontendアプリケーションのDockerイメージ格納用リポジトリ|
-|backend|backendアプリケーションのDockerイメージ格納用リポジトリ|
+|frontend|frontend アプリケーションの Docker イメージ格納用リポジトリ|
+|backend|backend アプリケーションの Docker イメージ格納用リポジトリ|
 
 ```sh
 aws cloudformation deploy \
@@ -240,7 +242,7 @@ aws cloudformation deploy \
   --template-file cfn/ecr.yaml
 ```
 
-ECRリポジトリのURLを変数に入れておく。
+ECR リポジトリの URI を変数に入れておく。
 
 ```sh
 frontend_ecr=$(aws ecr describe-repositories --repository-names frontend --query 'repositories[0].repositoryUri' --output text)
@@ -250,31 +252,31 @@ for repo in frontend backend; do
 done
 ```
 
-### CodePipelineとCodeBuild
+### イメージビルド用の CodePipeline と CodeBuild
 
-コンテナイメージをbuildしてイメージをECRにpushするパイプラインを作成する。
+コンテナイメージをビルドしてイメージを ECR にプッシュするパイプラインを作成する。
 
-パイプラインは4つ作成する。
+パイプラインは 4 つ作成する。
 
 |パイプライン名|用途|
 |---|---|
-|frontend-main-pipeline|frontendリポジトリの`main`ブランチへのコミットをトリガーに起動|
-|backend-main-pipeline|backendリポジトリの`main`ブランチへのコミットをトリガーに起動|
-|frontend-production-pipeline|frontendリポジトリの`production`ブランチへのコミットをトリガーに起動|
-|backend-procution-pipeline|backendリポジトリの`production`ブランチへのコミットをトリガーに起動|
+|frontend-main-pipeline|frontend リポジトリの `main` ブランチへのコミットをトリガーに起動|
+|backend-main-pipeline|backend リポジトリの `main` ブランチへのコミットをトリガーに起動|
+|frontend-production-pipeline|frontend リポジトリの `production` ブランチへのコミットをトリガーに起動|
+|backend-procution-pipeline|backend リポジトリの `production` ブランチへのコミットをトリガーに起動|
 
-CodeBuildプロジェクトは環境毎に共有し、2つ作成する。
+CodeBuild プロジェクトは環境毎に共有し、2 つ作成する。
 
-|CodeBuildプロジェクト名|用途|
+|CodeBuild プロジェクト名|用途|
 |---|---|
-|frontend-build|frontendアプリケーションのイメージビルド|
-|backend-build|backendアプリケーションのイメージビルド用|
+|frontend-build|frontend アプリケーションのイメージビルド用|
+|backend-build|backend アプリケーションのイメージビルド用|
 
-以下を参考にテンプレートを作成。
+以下を参考にテンプレートを作成する
 
 - [例 1: AWS CloudFormation を使用して AWS CodeCommit パイプラインを作成する](https://docs.aws.amazon.com/ja_jp/codepipeline/latest/userguide/tutorials-cloudformation-codecommit.html)
 
-CodePipeline用のS3バケットを作成する。
+CodePipeline 用の S3 バケットを作成する。
 
 ```sh
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
@@ -285,8 +287,8 @@ aws cloudformation deploy \
   --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket}
 ```
 
-CodeBuildプロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり2つ作成する。
-プロジェクトを環境毎に分けてもよいが、今回はCodePipelineからCodeBuildに`PIPELINE_BRANCH_NAME`という環境変数でブランチ名を渡すようにしている。
+CodeBuild プロジェクトを作成する。プロジェクトはアプリケーション毎に作成し、環境では共有する。つまり 2 つ作成する。
+プロジェクトを環境毎に分けてもよいが、今回は CodePipeline から CodeBuild に `PIPELINE_BRANCH_NAME` という環境変数でブランチ名を渡すようにしている。
 
 ```sh
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
@@ -296,14 +298,15 @@ for app in frontend backend; do
   aws cloudformation deploy \
     --stack-name gitops-${app}-codebuild-stack \
     --template-file cfn/codebuild.yaml \
-    --parameter-overrides CodeBuildProjectName=${app}-build \
+    --parameter-overrides \
+        CodeBuildProjectName=${app}-build \
         CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
         DockerHubSecret=${dockerhub_secret} \
     --capabilities CAPABILITY_NAMED_IAM
 done
 ```
 
-CodePipelineを作成する。パイプラインはアプリケーション毎かつ環境毎に作成する。つまり4つ作成する。
+CodePipeline を作成する。パイプラインはアプリケーション毎かつ環境毎に作成する。つまり 4 つ作成する。
 
 ```sh
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
@@ -313,32 +316,76 @@ for branch in main production; do
     aws cloudformation deploy \
       --stack-name gitops-${app}-${branch}-pipeline-stack \
       --template-file cfn/codepipeline.yaml \
-      --parameter-overrides CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} CodeCommitRepositoryName=${app} CodeCommitBranchName=${branch} CodeBuildProjectName=${app}-build \
+      --parameter-overrides \
+          CodeBuildProjectName=${app}-build \
+          CodePipelineArtifactStoreBucketName=${codepipeline_artifactstore_bucket} \
+          CodeCommitRepositoryName=${app} \
+          CodeCommitBranchName=${branch} \
       --capabilities CAPABILITY_NAMED_IAM
   done
 done
 ```
 
-### イメージタグの更新
+マネジメントコンソールからパイプラインの状態を確認し、パイプラインが成功していれば infra リポジトリにはプルリクエストが作成され、マージされているはず。
 
-マネジメントコンソールからパイプラインの状態を確認し、パイプラインが成功していればinfraリポジトリにはプルリクエストが作成されているはずなのでマージする。
-
-ビルドパイプラインを手動実行する場合は以下のコマンドで実行できるが、同じコミットからCodeBuildによって作成された別のブランチがinfraリポジトリにあると失敗するのでブランチを削除してから実施する。
+ビルドパイプラインを手動実行する場合は以下のコマンドで実行できる。
 
 ```sh
 aws codepipeline start-pipeline-execution --name frontend-main-pipeline
 ```
 
+### (オプション) テスト用の CodeBuild
+
+プルリクエストをトリガーとしてアプリケーションのテストを行う CodeBuild を作成する。
+
+CodeBuild 用の S3 バケットを作成する。
+
+```sh
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+codebuild_artifactstore_bucket="codebuild-artifactstore-${AWS_ACCOUNT_ID}"
+aws cloudformation deploy \
+  --stack-name gitops-codebuild-bucket-stack \
+  --template-file cfn/codebuild-bucket.yaml \
+  --parameter-overrides CodeBuildArtifactStoreBucketName=${codebuild_artifactstore_bucket}
+```
+
+CodeBuild プロジェクトを作成する。プロジェクトはアプリケーション (リポジトリ) 毎に作成する
+
+```sh
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+codebuild_artifactstore_bucket="codebuild-artifactstore-${AWS_ACCOUNT_ID}"
+for app in frontend backend infra; do
+  dockerhub_secret=$(aws secretsmanager list-secrets | jq -r '.SecretList[] | select( .Name == "dockerhub" ) | .ARN')
+  aws cloudformation deploy \
+    --stack-name gitops-${app}-codebuild-test-stack \
+    --template-file cfn/codebuild-test.yaml \
+    --parameter-overrides \
+        CodeBuildProjectName=${app}-test \
+        CodeCommitRepositoryName=${app} \
+        CodeBuildArtifactStoreBucketName=${codebuild_artifactstore_bucket} \
+        BuildSpecPath="buildspec-test.yml" \
+        DockerHubSecret=${dockerhub_secret} \
+    --capabilities CAPABILITY_NAMED_IAM
+done
+```
+
 ## クラスターの作成
-### VPCの作成
 
-クラスターのBlue/Green切り替えを考慮し、VPCはeksctlとは別に作成する。
+### VPC の作成
 
-以下から参照できるCloudFormationテンプレートをそのまま使う。stagingとproductionのクラスターは接続しないので、デフォルトの同じCIDRを使う。
+クラスターの Blue/Green 切り替えを考慮し、VPC は eksctl とは別に作成する。
+
+以下から参照できる CloudFormation テンプレートをそのまま使う。staging と production のクラスターは接続しないので、デフォルトの同じ CIDR を使う。
 
 - https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-public-private-vpc.html
 
-staging用のVPCを作成する。
+テンプレートを保存する。
+
+```sh
+wget https://s3.us-west-2.amazonaws.com/amazon-eks/cloudformation/2020-10-29/amazon-eks-vpc-private-subnets.yaml -P cfn
+```
+
+staging 用の VPC を作成する。
 
 ```sh
 aws cloudformation deploy \
@@ -346,7 +393,7 @@ aws cloudformation deploy \
   --template-file cfn/amazon-eks-vpc-private-subnets.yaml
 ```
 
-production用のVPCを作成する。
+production 用の VPC を作成する。
 
 ```sh
 aws cloudformation deploy \
@@ -356,54 +403,54 @@ aws cloudformation deploy \
 
 ### クラスターの作成
 
-stagingのVPCスタックのパラメータを確認する。
+staging の VPC スタックのパラメータを確認する。
 
 ```json
 $ aws cloudformation describe-stacks --stack-name gitops-staging-vpc-stack | jq -r '.Stacks[].Outputs'
 [
   {
     "OutputKey": "SecurityGroups",
-    "OutputValue": "sg-01b01e539121d8d82",
+    "OutputValue": "sg-06e99fe06fd87bf22",
     "Description": "Security group for the cluster control plane communication with worker nodes"
   },
   {
     "OutputKey": "VpcId",
-    "OutputValue": "vpc-0be6ec61c0615640f",
+    "OutputValue": "vpc-06ca05f948c53c581",
     "Description": "The VPC Id"
   },
   {
     "OutputKey": "SubnetIds",
-    "OutputValue": "subnet-0082a777db9e2c323,subnet-0557418851a60ebae,subnet-00ae15e7ef85b18f4,subnet-0990c739a11cec49c",
+    "OutputValue": "subnet-00ba83d23f5cac84b,subnet-027ac364f59b41170,subnet-0732433774c76279a,subnet-08460b3c7a1cdcdcc",
     "Description": "Subnets IDs in the VPC"
   }
 ]
 ```
 
-この出力に合わせて`staging.yaml`のVPC定義を書き換える。AZとパブリックかプライベートかはマネコンから確認する。
+この出力に合わせて `staging.yaml` の VPC 定義を書き換える。サブネットの AZ とパブリックかプライベートかはマネコンから確認する。
 
 ```yaml
 vpc:
-  id: vpc-0be6ec61c0615640f
+  id: vpc-06ca05f948c53c581
   subnets:
     public:
       ap-northeast-1a:
-          id: subnet-0082a777db9e2c323
+          id: subnet-00ba83d23f5cac84b
       ap-northeast-1c:
-          id: subnet-0557418851a60ebae
+          id: subnet-027ac364f59b41170
     private:
       ap-northeast-1a:
-          id: subnet-00ae15e7ef85b18f4
+          id: subnet-0732433774c76279a
       ap-northeast-1c:
-          id: subnet-0990c739a11cec49c
+          id: subnet-08460b3c7a1cdcdcc
 ```
 
-stagingクラスターを作成する。
+staging クラスターを作成する。
 
 ```sh
 eksctl create cluster -f staging.yaml
 ```
 
-同様にproductionクラスターも作成する。
+同様に production クラスターも作成する。
 
 ```shell
 aws cloudformation describe-stacks --stack-name gitops-production-vpc-stack | jq -r '.Stacks[].Outputs'
@@ -427,23 +474,23 @@ eksctl create nodegroup -f production-ng1.yaml
 
 ### IRSA
 
-いくつかのPodはIAMロールが必要なため、IAM Roles for Service Accounts(IRSA)を設定する。
+いくつかの Pod は IAM ロールが必要なため、IAM Roles for Service Accounts(IRSA) を設定する。
 
-IRSA関連の操作にeksctlを使ってもよいが、ロール名が自動生成となりわかりにくいのと、そのロール名をKubernetesマニフェストに反映する必要がある。
-今回はなるべくeksctlを使わないことにする。使わない場合のやり方は以下にまとまっている。
+IRSA 関連の操作に eksctl を使ってもよいが、ロール名が自動生成となるため、そのロール名を Kubernetes マニフェストに反映する必要がある。
+今回はなるべく eksctl を使わないことにする。使わない場合のやり方は以下にまとまっている。
 
 - [Kubernetes サービスアカウントに対するきめ細やかな IAM ロール割り当ての紹介](https://aws.amazon.com/jp/blogs/news/introducing-fine-grained-iam-roles-service-accounts/)
 - [サービスアカウントの IAM ロールとポリシーの作成](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-service-account-iam-policy-and-role.html)
 
-#### OICDプロバイダー
+#### OICD プロバイダーの作成
 
-OICDプロバイダーはクラスターの作成時に有効化済み。
+OICD プロバイダーはクラスターの作成時に有効化済み。
 
 #### DynamoDB
 
-このサンプルアプリケーションはDynamoDBにアクセスするので、IRSAで`backend`のPodに適切な権限を設定する必要がある。
+このサンプルアプリケーションは DynamoDB にアクセスするので、IRSA で `backend` のPodに適切な権限を設定する必要がある。
 
-テーブルとIAMロールを作成する。ServiceAccountのマニフェストではアノテーションでこのIAMロールを指定し、DeploymentのマニフェストではServiceAccountを指定する。
+テーブルと IAM ロールを作成する。ServiceAccount のマニフェストではアノテーションでこの IAM ロールを指定し、Deployment のマニフェストでは ServiceAccount を指定する。
 
 ```sh
 for cluster_name in staging production; do
@@ -462,9 +509,7 @@ done
 
 #### AWS Load Balancer Controller
 
-[AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)が使用するIAMロールを作成する。
-
-IAMロールを作成する。
+[AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/) が使用する IAM ロールを作成する。
 
 ```sh
 for cluster_name in staging production; do
@@ -477,11 +522,24 @@ for cluster_name in staging production; do
 done
 ```
 
-#### Kubernetes External Secrets
+#### Cluster Autoscaler
 
-[Kubernetes External Secrets](https://github.com/external-secrets/kubernetes-external-secrets)が使用するIAMロールを作成する。
+[Cluster Autoscaler](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/cluster-autoscaler.html) が使用する IAM ロールを作成する。
 
-IAMロールを作成する。
+```sh
+for cluster_name in staging production; do
+  oidc_provider=$(aws eks describe-cluster --name ${cluster_name} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+  aws cloudformation deploy \
+    --stack-name gitops-${cluster_name}-cluster-autoscaler-iam-stack \
+    --template-file cfn/cluster-autoscaler-iam.yaml \
+    --parameter-overrides ClusterName=${cluster_name} NamespaceName=kube-system ServiceAccountName=cluster-autoscaler OidcProvider=${oidc_provider} \
+    --capabilities CAPABILITY_NAMED_IAM
+done
+```
+
+#### External Secrets Operator
+
+[External Secrets Operator](https://github.com/external-secrets/external-secrets) が使用する IAM ロールを作成する。
 
 ```sh
 for cluster_name in staging production; do
@@ -507,9 +565,7 @@ done
 
 #### Container Insights
 
-[Container Insights](https://docs.aws.amazon.com/ja_jp/AmazonCloudWatch/latest/monitoring/deploy-container-insights-EKS.html)が使用するIAMロールを作成する。
-
-IAMロールを作成する。
+[Container Insights](https://docs.aws.amazon.com/ja_jp/AmazonCloudWatch/latest/monitoring/deploy-container-insights-EKS.html) が使用する IAM ロールを作成する。
 
 ```sh
 for cluster_name in staging production; do
@@ -526,24 +582,23 @@ for cluster_name in staging production; do
     --capabilities CAPABILITY_NAMED_IAM
 done
 ```
-### stagingクラスターへのアプリケーションのデプロイ
 
-kubectlのコンテキストをstagingクラスターに切り替えてから作業すること。
+### staging クラスターへのアプリケーションのデプロイ
+
+kubectl のコンテキストを staging クラスターに切り替えてから作業すること。
 
 #### ArgoCD のデプロイ
 
-Argo CDをデプロイする。
+Argo CD をデプロイする。
 
 - [Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
-
-kubectlのコンテキストをstagingクラスターに切り替えてから作業すること。
 
 ```sh
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-今回はポートフォワードを前提としてLoad Balancerは作成しない。ポートフォワードする。
+今回はポートフォワードを前提として Load Balancer は作成しない。ポートフォワードする。
 
 ```sh
 kubectl port-forward svc/argocd-server -n argocd 8080:443
@@ -558,17 +613,17 @@ export ARGOCD_OPTS='--port-forward-namespace argocd'
 argocd login ${argocd_server} --username admin --password ${argocd_pwd} --insecure
 ```
 
-パスワードを確認して[http://localhost:8080](http://localhost:8080)からアクセスも可能。
+パスワードを確認して [http://localhost:8080](http://localhost:8080) からアクセスも可能。
 
 ```she
 echo ${argocd_pwd}
 ```
 
-#### CodeCommitリポジトリの登録
+#### CodeCommit リポジトリの登録
 
-CodeCommitリポジトリを登録する。
+CodeCommit リポジトリを登録する。
 
-プライベートリポジトリの場合は、`--insecure-skip-server-verification`フラグでSSH host keyのチェックを無効化するか、あらかじめSSH host keyを追加する必要がある。ここではCodeCommitのSSH host keyを追加する。
+プライベートリポジトリの場合は、`--insecure-skip-server-verification` フラグで SSH host key のチェックを無効化するか、あらかじめ SSH host key を追加する必要がある。ここでは CodeCommit の SSH host key を追加する。ここで追加されるものは infra/argocd/base/argocd-ssh-known-hosts-cm.yaml にも登録してある。
 
 ```sh
 ssh-keyscan git-codecommit.ap-northeast-1.amazonaws.com | argocd cert add-ssh --batch
@@ -580,7 +635,7 @@ ssh-keyscan git-codecommit.ap-northeast-1.amazonaws.com | argocd cert add-ssh --
 argocd cert list --cert-type ssh
 ```
 
-CodeCommitリポジトリを追加する。`ssh://`の後ろにSSHキーIDを指定する必要がある。
+CodeCommit リポジトリを追加する。`ssh://` の後ろに SSH キー ID を指定する必要がある。
 
 ```sh
 ssh_key_id=$(aws iam list-ssh-public-keys --user-name argocd | jq -r '.SSHPublicKeys[].SSHPublicKeyId')
@@ -588,7 +643,7 @@ argocd repo add ssh://${ssh_key_id}@git-codecommit.ap-northeast-1.amazonaws.com/
   --ssh-private-key-path ./id_rsa
 ```
 
-SSH host keyが認識されるまでに時間がかかるのか、失敗する場合は少しだけ待ってからやると上手くいく。
+SSH host key が認識されるまでに時間がかかるのか、失敗する場合は少しだけ待ってからやると上手くいく。
 
 確認する。
 
@@ -596,33 +651,37 @@ SSH host keyが認識されるまでに時間がかかるのか、失敗する�
 argocd repo list
 ```
 
-秘密鍵は`repo-XXXXXXXXXX`というSecretに格納される。
+秘密鍵は `repo-XXXXXXXXXX` という Secret に格納される。
 
-以上でArgo CDのセットアップが完了。
+```sh
+k get secret -n argocd
+```
 
-（参考）HTTPS接続の場合
+以上で Argo CD のセットアップが完了。
+
+（参考）HTTPS 接続の場合
 
 ```sh
 argocd repo add ${infra_codecommit_http} --username <username> --password <password>
 ```
 
-認証情報は`repo-XXXXXXXXXX`というSecretに格納される。
+認証情報は `repo-XXXXXXXXXX` というSecretに格納される。
 
-#### Argo CDのApplicationリソースの作成
+#### Argo CD の Application リソースの作成
 
-今回CodeCommitリポジトリはそれぞれ以下のブランチ戦略をとる。
+今回 CodeCommit リポジトリはそれぞれ以下のブランチ戦略をとる。
 
 |リポジトリ名|ブランチ戦略|
 |---|---|
-|frontend|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイ|
-|backend|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイ|
-|infra|`main`ブランチをstaging環境、`production`ブランチをproduction環境にデプロイする。さらに各環境の差分もディレクトリ毎に保持する|
+|frontend|`main` ブランチを staging 環境、`production` ブランチを production 環境にデプロイ|
+|backend|`main` ブランチを staging 環境、`production` ブランチを production 環境にデプロイ|
+|infra|`main` ブランチを staging 環境、`production` ブランチを production 環境にデプロイする。さらに各環境の差分もディレクトリ毎に保持する|
 
-また、App of Apps構成とし、infraリポジトリのappディレクトリにArgo CDのApplicationリソースの定義を格納する。
+また、App of Apps 構成とし、infra リポジトリの app ディレクトリに Argo CD の Application リソースの定義を格納する。
 
 - [Cluster Bootstrapping](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/)
 
-App of AppsのApplicationを作成する。
+App of Apps の Application を作成する。
 
 ```sh
 cluster_name=staging
@@ -646,7 +705,7 @@ argocd app create apps \
 argocd app list
 ```
 
-もしSyncが上手くいかなかった場合は手動Syncを試す。
+もし Sync が上手くいかなかった場合は手動 Sync を試す。
 
 ```sh
 argocd app sync <App名>
@@ -654,49 +713,43 @@ argocd app sync <App名>
 
 #### 動作確認
 
-Podが正常に稼働していることを確認する。
+Pod が正常に稼働していることを確認する。
 
 ```sh
 $ k get po -A
-NAMESPACE           NAME                                            READY   STATUS    RESTARTS   AGE
-amazon-cloudwatch   cloudwatch-agent-ggspn                          1/1     Running   0          10m
-amazon-cloudwatch   cloudwatch-agent-xkn9v                          1/1     Running   0          10m
-amazon-cloudwatch   fluent-bit-6l4jm                                1/1     Running   0          10m
-amazon-cloudwatch   fluent-bit-tbtnx                                1/1     Running   0          10m
-argocd              argocd-application-controller-0                 1/1     Running   0          4m51s
-argocd              argocd-dex-server-76ff776f97-v4qpt              1/1     Running   0          4m56s
-argocd              argocd-redis-747b678f89-8rcn4                   1/1     Running   0          4m56s
-argocd              argocd-repo-server-6fc4456c89-zhd7c             1/1     Running   0          4m56s
-argocd              argocd-server-7d57bc994b-n49nf                  1/1     Running   0          4m56s
-backend             backend-7d7857c7fc-6jmwv                        1/1     Running   0          6m32s
-backend             backend-7d7857c7fc-7n4ck                        1/1     Running   0          6m32s
-calico-system       calico-kube-controllers-57b4f8758f-f7v5s        1/1     Running   0          8m44s
-calico-system       calico-node-nw99p                               1/1     Running   0          8m45s
-calico-system       calico-node-p9bcg                               1/1     Running   0          8m45s
-calico-system       calico-typha-578579ffdd-sbmbl                   1/1     Running   0          6m57s
-calico-system       calico-typha-578579ffdd-zzvnj                   1/1     Running   0          8m45s
-cert-manager        cert-manager-68ff46b886-2mp7b                   1/1     Running   0          8m37s
-cert-manager        cert-manager-cainjector-7cdbb9c945-82p6q        1/1     Running   0          8m38s
-cert-manager        cert-manager-webhook-67584ff488-28wcq           1/1     Running   0          8m38s
-external-secrets    external-secrets-56fbfc9687-w2csf               1/1     Running   0          9m1s
-frontend            frontend-697b78f6c8-bdwvv                       1/1     Running   0          9m1s
-frontend            frontend-697b78f6c8-szph7                       1/1     Running   0          9m1s
-gatekeeper-system   gatekeeper-audit-54b5f86d57-k49z8               1/1     Running   0          9m7s
-gatekeeper-system   gatekeeper-controller-manager-5b96bd668-4vncl   1/1     Running   0          9m7s
-gatekeeper-system   gatekeeper-controller-manager-5b96bd668-5qt2t   1/1     Running   0          9m7s
-gatekeeper-system   gatekeeper-controller-manager-5b96bd668-psls2   1/1     Running   0          9m7s
-kube-system         aws-load-balancer-controller-7b497985b6-qqtxn   1/1     Running   0          8m24s
-kube-system         aws-node-2s8b6                                  1/1     Running   0          100m
-kube-system         aws-node-c8dg9                                  1/1     Running   0          100m
-kube-system         coredns-54bc78bc49-d8dgk                        1/1     Running   0          121m
-kube-system         coredns-54bc78bc49-gnp55                        1/1     Running   0          121m
-kube-system         kube-proxy-85xhh                                1/1     Running   0          100m
-kube-system         kube-proxy-jf5sl                                1/1     Running   0          100m
-kube-system         metrics-server-9f459d97b-b4ktf                  1/1     Running   0          10m
-tigera-operator     tigera-operator-657cc89589-vvttr                1/1     Running   0          9m8s
+NAMESPACE           NAME                                               READY   STATUS    RESTARTS      AGE
+amazon-cloudwatch   cloudwatch-agent-7fvd4                             1/1     Running   2 (27h ago)   16d
+amazon-cloudwatch   cloudwatch-agent-zmclk                             1/1     Running   2 (27h ago)   16d
+amazon-cloudwatch   fluent-bit-jgfqm                                   1/1     Running   2 (27h ago)   16d
+amazon-cloudwatch   fluent-bit-lfpgj                                   1/1     Running   2 (27h ago)   16d
+argocd              argocd-application-controller-0                    1/1     Running   0             11m
+argocd              argocd-applicationset-controller-bbf48bd7c-vrttz   1/1     Running   0             11m
+argocd              argocd-dex-server-7d757d85d5-xfsdv                 1/1     Running   0             11m
+argocd              argocd-notifications-controller-7b7c9854dd-fgdmq   1/1     Running   0             11m
+argocd              argocd-redis-65596bf87-n4q98                       1/1     Running   2 (27h ago)   16d
+argocd              argocd-repo-server-c996ccd4-9lc8t                  1/1     Running   0             11m
+argocd              argocd-server-86576f9c7d-djh7z                     1/1     Running   0             11m
+backend             backend-68b956cd54-q54kd                           1/1     Running   2 (27h ago)   16d
+backend             backend-68b956cd54-rmns7                           1/1     Running   2 (27h ago)   16d
+cert-manager        cert-manager-795d7f859d-q2kx7                      1/1     Running   2 (27h ago)   16d
+cert-manager        cert-manager-cainjector-5fcddc948c-rjfvl           1/1     Running   2 (27h ago)   16d
+cert-manager        cert-manager-webhook-5b64f87794-d8fc5              1/1     Running   2 (27h ago)   16d
+external-secrets    external-secrets-8f7d97cb-g6skp                    1/1     Running   0             83s
+external-secrets    external-secrets-cert-controller-bd9964f5d-rhn7f   1/1     Running   0             83s
+external-secrets    external-secrets-webhook-589cfdf4f7-jfqdr          1/1     Running   0             83s
+frontend            frontend-55d96fb5cf-9n4gx                          1/1     Running   2 (27h ago)   16d
+frontend            frontend-55d96fb5cf-kh8w8                          1/1     Running   2 (27h ago)   16d
+kube-system         aws-load-balancer-controller-6745dc6569-2nn4t      1/1     Running   2 (27h ago)   16d
+kube-system         aws-node-6qjzl                                     1/1     Running   3 (27h ago)   16d
+kube-system         aws-node-fltvm                                     1/1     Running   2 (27h ago)   16d
+kube-system         coredns-69cfddc4b4-h7h7j                           1/1     Running   2 (27h ago)   16d
+kube-system         coredns-69cfddc4b4-jb7gg                           1/1     Running   2 (27h ago)   16d
+kube-system         kube-proxy-d5fvq                                   1/1     Running   2 (27h ago)   16d
+kube-system         kube-proxy-xrnss                                   1/1     Running   2 (27h ago)   16d
+kube-system         metrics-server-847dcc659d-frr4w                    1/1     Running   2 (27h ago)   16d
 ```
 
-URLを確認する。
+URL を確認する。
 
 ```sh
 $ kubectl get ingress -n frontend
@@ -704,15 +757,15 @@ NAME       HOSTS   ADDRESS                                                      
 frontend   *       XXXXXXXX-frontend-frontend-XXXX-XXXXXXXXXX.ap-northeast-1.elb.amazonaws.com   80      4m37s
 ```
 
-URLにアクセスしてアプリケーションが動作することを確認する。
+URL にアクセスしてアプリケーションが動作することを確認する。
 
-### productionクラスターへのアプリケーションのデプロイ
+### production クラスターへのアプリケーションのデプロイ
 
-kubectlのコンテキストをproductionクラスターに切り替え、同じ作業をクラスターを実施する。
+kubectl のコンテキストを production クラスターに切り替え、同じ作業をクラスターを実施する。
 
 ## 補足
 
-### CodeBuildからのプルリク作成
+### CodeBuild からのプルリク作成
 
 以下が参考になる。
 
@@ -720,19 +773,12 @@ kubectlのコンテキストをproductionクラスターに切り替え、同じ
 - [ビルド環境の環境変数](https://docs.aws.amazon.com/ja_jp/codebuild/latest/userguide/build-env-ref-env-vars.html)
 - [AWS CLI 認証情報ヘルパーを使用する Linux, macOS, or Unix での AWS CodeCommit リポジトリへの HTTPS 接続のセットアップステップ](https://docs.aws.amazon.com/ja_jp/codecommit/latest/userguide/setting-up-https-unixes.html)
 
-詳しくは`buildspec.yaml`を参照。
+詳しくは `buildspec.yaml` を参照。
 
 ### Kustomize
 
-Kustomize流のディレクトリ構成については以下の資料を参照。
+Kustomize 流のディレクトリ構成については以下の資料を参照。
 
 - [Introduction to kustomize](https://speakerdeck.com/spesnova/introduction-to-kustomize)
 
-Argo CDはKustomizeかどうかは自動判別してくれる。pathの指定で`kustomize build`を実行するディレクトリを指定する。
-
-### App of Apps
-
-Necoプロジェクトだと、以下がApp of Appsのディレクトリとなっており参考になる。
-
-- [https://github.com/cybozu-go/neco-apps/tree/main/argocd-config/base](https://github.com/cybozu-go/neco-apps/tree/main/argocd-config/base)
-
+Argo CD は Kustomize かどうかは自動判別してくれる。pathの指定で `kustomize build` を実行するディレクトリを指定する。

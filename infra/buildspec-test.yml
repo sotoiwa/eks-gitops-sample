@@ -1,0 +1,63 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  pre_build:
+    commands:
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+      # Kustomize のインストール
+      - KUSTOMIZE_VERSION="3.9.4"
+      - curl -s -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz | tar xz -C /tmp
+      - mv /tmp/kustomize /usr/local/bin
+      - kustomize version
+      # Kyverno CLI のインストール
+      # - KYVERNO_VERSION=$(curl -s "https://api.github.com/repos/kyverno/kyverno/releases/latest" |
+      #     grep '"tag_name":' |
+      #     sed -E 's/.*"v([^"]+)".*/\1/'
+      #   )
+      - KYVERNO_VERSION="1.4.2"
+      - curl -s -L https://github.com/kyverno/kyverno/releases/download/v${KYVERNO_VERSION}/kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz | tar xz -C /tmp
+      - mv /tmp/kyverno /usr/local/bin
+      - kyverno version
+      - |
+        if [ "${DESTINATION_REFERENCE}" = "refs/heads/main" ]; then
+          TARGET_ENV="staging"
+        elif [ "${DESTINATION_REFERENCE}" = "refs/heads/production" ]; then
+          TARGET_ENV="production"
+        else
+          exit 1
+        fi
+
+  build:
+    commands:
+      - kustomize build --enable_kyaml=false policies/overlays/${TARGET_ENV}/ > /tmp/policy.yaml
+      - RESULT="SUCCESS"
+      - |
+        for app in aws-load-balancer-controller backend calico cert-manager container-insights frontend kyverno metrics-server namespaces; do
+          echo "Testing ${app}..."
+          kustomize build --enable_kyaml=false ${app}/overlays/${TARGET_ENV}/ > /tmp/${app}.yaml
+          kyverno apply /tmp/policy.yaml --resource /tmp/${app}.yaml --policy-report > ${app}-report.yaml
+          kyverno apply /tmp/policy.yaml --resource /tmp/${app}.yaml || RESULT="FAIL"
+          echo ""
+        done
+      - test ${RESULT} = "SUCCESS"
+
+  post_build:
+    commands:
+      - test ${CODEBUILD_BUILD_SUCCEEDING} -eq 1 && RESULT="成功" || RESULT="失敗"
+      - |
+        aws codecommit post-comment-for-pull-request \
+        --pull-request-id ${PULL_REQUEST_ID} \
+        --repository-name ${REPOSITORY_NAME} \
+        --before-commit-id ${DESTINATION_COMMIT_ID} \
+        --after-commit-id ${SOURCE_COMMIT_ID} \
+        --content "\
+        テストが${RESULT}しました。結果は[こちら](https://${AWS_REGION}.console.aws.amazon.com/codesuite/codebuild/${AWS_ACCOUNT_ID}/projects/${CODEBUILD_BUILD_ID%%:*}/build/${CODEBUILD_BUILD_ID}/log?region=${AWS_REGION})を参照してください。
+        "
+
+artifacts:
+  files:
+    - "*-report.yaml"
+    - "/tmp/*.yaml"

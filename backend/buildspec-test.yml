@@ -1,0 +1,29 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  pre_build:
+    commands:
+      - echo pre_build
+
+  build:
+    commands:
+      - echo build
+
+  post_build:
+    commands:
+      - test ${CODEBUILD_BUILD_SUCCEEDING} -eq 1 && RESULT="成功" || RESULT="失敗"
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+      - |
+        aws codecommit post-comment-for-pull-request \
+        --pull-request-id ${PULL_REQUEST_ID} \
+        --repository-name ${REPOSITORY_NAME} \
+        --before-commit-id ${DESTINATION_COMMIT_ID} \
+        --after-commit-id ${SOURCE_COMMIT_ID} \
+        --content "\
+        テストが${RESULT}しました。
+
+        https://${AWS_REGION}.console.aws.amazon.com/codesuite/codebuild/${AWS_ACCOUNT_ID}/projects/cicd-sample-test/build/${CODEBUILD_BUILD_ID}/log?region=${AWS_REGION}
+        "

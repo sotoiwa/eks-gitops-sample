@@ -42,6 +42,7 @@ Resources:
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProjectName}:*
               - Effect: Allow
                 Action:
+                  - s3:ListBucket
                   - s3:PutObject
                   - s3:GetObject
                   - s3:GetObjectVersion
@@ -82,17 +83,21 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
+      Name: !Ref CodeBuildProjectName
+      ServiceRole: !Sub ${CodeBuildServiceRole.Arn}
+      Source:
+        Type: CODEPIPELINE
       Artifacts:
-        EncryptionDisabled: false
+        Type: CODEPIPELINE
         Name: !Ref CodeBuildProjectName
         Packaging: NONE
-        Type: CODEPIPELINE
+        EncryptionDisabled: false
       Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
-        ImagePullCredentialsType: CODEBUILD
-        PrivilegedMode: true
         Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: true
+        ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
           - Name: DOCKERHUB_USER
             Type: SECRETS_MANAGER
@@ -105,7 +110,3 @@ Resources:
           Status: ENABLED
         S3Logs:
           Status: DISABLED
-      Name: !Ref CodeBuildProjectName
-      ServiceRole: !GetAtt [CodeBuildServiceRole, Arn]
-      Source:
-        Type: CODEPIPELINE

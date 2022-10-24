@@ -11,3 +11,4 @@ id_rsa*
 trust.json*
 *policy.json*
 .dockerconfigjson
+allow_put_metrics_data.json

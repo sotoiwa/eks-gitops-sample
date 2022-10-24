@@ -15,10 +15,10 @@ Parameters:
     Type: String
 
 Resources:
-  ExternalSecretsRole:
+  AWSCNIMetricsHelperRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub external-secrets-${ClusterName}
+      RoleName: !Sub cni-metrics-helper-${ClusterName}
       AssumeRolePolicyDocument:
         !Sub |
           {
@@ -39,16 +39,17 @@ Resources:
             ]
           }
       Policies:
-        - PolicyName: !Sub external-secrets-policy
+        - PolicyName: !Sub cni-metrics-helper-policy
           PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetResourcePolicy
-                  - secretsmanager:GetSecretValue
-                  - secretsmanager:DescribeSecret
-                  - secretsmanager:ListSecretVersionIds
-                Resource:
-                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:dockerconfigjson-*"
-                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:mydb/*"
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:PutMetricData"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }

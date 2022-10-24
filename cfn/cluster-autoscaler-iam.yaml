@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ClusterName:
+    Description: EKS cluster name
+    Type: String
+  NamespaceName:
+    Description: Namespace name
+    Type: String
+  ServiceAccountName:
+    Description: Service Account name
+    Type: String
+  OidcProvider:
+    Description: OIDC Provider
+    Type: String
+
+Resources:
+  AWSLoadBalancerControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub cluster-autoscaler-${ClusterName}
+      AssumeRolePolicyDocument:
+        !Sub |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/${OidcProvider}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringEquals": {
+                    "${OidcProvider}:sub": "system:serviceaccount:${NamespaceName}:${ServiceAccountName}"
+                  }
+                }
+              }
+            ]
+          }
+      Policies:
+        - PolicyName: !Sub cluster-autoscaler-policy
+          PolicyDocument:
+            !Sub |
+              {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                      {
+                          "Sid": "VisualEditor0",
+                          "Effect": "Allow",
+                          "Action": [
+                              "autoscaling:SetDesiredCapacity",
+                              "autoscaling:TerminateInstanceInAutoScalingGroup"
+                          ],
+                          "Resource": "*",
+                          "Condition": {
+                              "StringEquals": {
+                                  "aws:ResourceTag/k8s.io/cluster-autoscaler/${ClusterName}": "owned"
+                              }
+                          }
+                      },
+                      {
+                          "Sid": "VisualEditor1",
+                          "Effect": "Allow",
+                          "Action": [
+                              "autoscaling:DescribeAutoScalingInstances",
+                              "autoscaling:DescribeAutoScalingGroups",
+                              "ec2:DescribeLaunchTemplateVersions",
+                              "autoscaling:DescribeTags",
+                              "autoscaling:DescribeLaunchConfigurations"
+                          ],
+                          "Resource": "*"
+                      }
+                  ]
+              }

@@ -2,4 +2,4 @@ resources:
 - backend-deployment.yaml
 - backend-service.yaml
 - backend-iamrole-sa.yaml
-- backend-external-secret.yaml
+# - backend-external-secret.yaml

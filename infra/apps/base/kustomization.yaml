@@ -5,9 +5,6 @@ resources:
 - aws-load-balancer-controller.yaml
 - external-secrets.yaml
 - cert-manager.yaml
-- calico.yaml
-- gatekeeper.yaml
-- policies.yaml
 - argocd.yaml
 - metrics-server.yaml
 - container-insights.yaml

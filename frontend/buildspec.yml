@@ -30,13 +30,13 @@ phases:
           TARGET_ENV="${PRODUCTION_ENV_NAME}"
         fi
 
-      # AWS CLIのバージョン確認
+      # AWS CLI のバージョン確認
       - aws --version
 
-      # Dockerのバージョン確認
+      # Docker のバージョン確認
       - docker version
 
-      # Hadolintのインストール
+      # Hadolint のインストール
       - HADOLINT_VERSION=$(curl -s "https://api.github.com/repos/hadolint/hadolint/releases/latest" |
           grep '"tag_name":' |
           sed -E 's/.*"v([^"]+)".*/\1/'
@@ -45,14 +45,14 @@ phases:
       - chmod +x /usr/local/bin/hadolint
       - hadolint --version
 
-      # Hadolintによるチェック
+      # Hadolint によるチェック
       #
       # ルール違反が検出された場合はビルドを停止する
-      # 無視したいルールがある場合は--ignoreで指定する
+      # 無視したいルールがある場合は --ignore で指定する
       # hadolint --ignore DL3025 --ignore DL3026 Dockerfile
       - hadolint Dockerfile
 
-      # Dockleのインストール
+      # Dockle のインストール
       - DOCKLE_VERSION=$(curl -s "https://api.github.com/repos/goodwithtech/dockle/releases/latest" |
           grep '"tag_name":' |
           sed -E 's/.*"v([^"]+)".*/\1/'
@@ -61,7 +61,7 @@ phases:
       - mv /tmp/dockle /usr/local/bin
       - dockle --version
 
-      # Trivyのインストール
+      # Trivy のインストール
       # - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
       - TRIVY_VERSION=$(curl -s "https://api.github.com/repos/aquasecurity/trivy/releases/latest" |
           grep '"tag_name":' |
@@ -71,10 +71,10 @@ phases:
       - mv /tmp/trivy /usr/local/bin
       - trivy --version
 
-      # Docker Hubへのログイン
+      # Docker Hub へのログイン
       - echo ${DOCKERHUB_PASS} | docker login --username ${DOCKERHUB_USER} --password-stdin
 
-      # ECRへのログイン
+      # ECR へのログイン
       - aws ecr get-login-password | docker login --username AWS --password-stdin https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
   build:
     on-failure: ABORT
@@ -84,28 +84,28 @@ phases:
   post_build:
     on-failure: ABORT
     commands:
-      # Dockleによるイメージチェック
+      # Dockle によるイメージチェック
       #
-      # INFO以上で無視していないルールに違反した場合はビルドを停止する
+      # INFO 以上で無視していないルールに違反した場合はビルドを停止する
       - dockle --exit-code 1 --exit-level info --ignore CIS-DI-0007 --ignore CIS-DI-0005 --ignore CIS-DI-0006 --ignore DKL-LI-0003 ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
 
-      # Trivyによるチェック（SecurityHub連携）
+      # Trivy によるチェック (SecurityHub連携)
       #
-      # 結果をasff形式で出力し、結果をSecurityHubに連携する
-      # HIGHとCRITICALのみを対象とする
-      - trivy image --no-progress --severity HIGH,CRITICAL --format template --template "@asff.tpl" -o report.asff ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
-      - aws securityhub batch-import-findings --findings file://report.asff
+      # 結果を asff 形式で出力し、結果を SecurityHub に連携する
+      # HIGH と CRITICAL のみを対象とする
+      # - trivy image --no-progress --severity HIGH,CRITICAL --format template --template "@asff.tpl" -o report.asff ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
+      # - aws securityhub batch-import-findings --findings file://report.asff
 
-      # Trivyによるチェック（ビルド強制停止）
+      # Trivy によるチェック (ビルド強制停止)
       #
-      # CRITICALが検出された場合はビルドを停止する
+      # CRITICAL が検出された場合はビルドを停止する
       - trivy image --no-progress --exit-code 1 --severity CRITICAL --ignore-unfixed ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
 
-      # ECRへpush
+      # ECR へプッシュ
       - docker push ${ECR_REPOSITORY_URI}:latest
       - docker push ${ECR_REPOSITORY_URI}:${IMAGE_TAG}
 
-      # mainブランチへのマージのプルリクエストを作成する
+      # main ブランチへのマージのプルリクエストを作成する
       - INFRA_CODECOMMIT_REPOSITORY_URI=https://git-codecommit.${AWS_DEFAULT_REGION}.amazonaws.com/v1/repos/${INFRA_CODECOMMIT_REPOSITORY_NAME}
       - git config --global user.email "ci-build@example.com"
       - git config --global user.name "ci-build"
@@ -129,8 +129,8 @@ phases:
           --description "${PR_MSG}" \
           --targets "repositoryName=${INFRA_CODECOMMIT_REPOSITORY_NAME},sourceReference=${NEW_BRANCH_NAME},destinationReference=${STAGING_BRANCH_NAME}" \
           --query 'pullRequest.pullRequestId' --output text)
-      # mainブランチへマージする
-      # productionへのデプロイについては、productionへのマージが別途必要
+      # main ブランチへマージする
+      # production へのデプロイについては、production へのマージが別途必要
       - |
         aws codecommit merge-pull-request-by-fast-forward \
           --pull-request-id ${pull_request_id} \
@@ -138,3 +138,7 @@ phases:
         aws codecommit delete-branch  \
           --repository-name ${INFRA_CODECOMMIT_REPOSITORY_NAME} \
           --branch-name ${NEW_BRANCH_NAME}
+
+# artifacts:
+#   files:
+#     - "report.asff"

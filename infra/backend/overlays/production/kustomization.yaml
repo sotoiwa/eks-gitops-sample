@@ -5,4 +5,4 @@ patches:
 - env.yaml
 - image.yaml
 - sa.yaml
-- key.yaml
+# - key.yaml

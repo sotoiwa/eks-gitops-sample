@@ -4,21 +4,21 @@ kind: ClusterConfig
 metadata:
   name: production
   region: ap-northeast-1
-  version: "1.20"
+  version: "1.23"
 
 vpc:
-  id: vpc-00f9c21cc545698cc
+  id: vpc-0a2c4bbecb3cf929a
   subnets:
     public:
       ap-northeast-1a:
-          id: subnet-0c83cd432fa467b31
+          id: subnet-032eb505beae31782
       ap-northeast-1c:
-          id: subnet-0dc667c51fdc84788
+          id: subnet-0e652912ce2814ebb
     private:
       ap-northeast-1a:
-          id: subnet-0c589a09a32f7e034
+          id: subnet-07df8cee98c2af067
       ap-northeast-1c:
-          id: subnet-02c3b6cda10c09211
+          id: subnet-0716a9999a3202d4e
 
 cloudWatch:
   clusterLogging:

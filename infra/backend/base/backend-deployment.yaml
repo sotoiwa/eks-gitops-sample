@@ -1,5 +1,4 @@
-# コメント
-apiVersion: apps/v1 # コメント
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend

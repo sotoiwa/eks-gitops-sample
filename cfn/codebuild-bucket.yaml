@@ -1,19 +1,19 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  CodePipelineArtifactStoreBucketName:
-    Description: CodePipeline artifact store bucket name
+  CodeBuildArtifactStoreBucketName:
+    Description: CodeBuild artifact store bucket name
     Type: String
 
 Resources:
-  CodePipelineArtifactStoreBucket:
+  CodeBuildArtifactStoreBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Ref CodePipelineArtifactStoreBucketName
-  CodePipelineArtifactStoreBucketPolicy:
+      BucketName: !Ref CodeBuildArtifactStoreBucketName
+  CodeBuildArtifactStoreBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref CodePipelineArtifactStoreBucket
+      Bucket: !Ref CodeBuildArtifactStoreBucket
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -22,7 +22,7 @@ Resources:
             Principal: "*"
             Action: s3:PutObject
             Resource:
-              !Sub ${CodePipelineArtifactStoreBucket.Arn}/*
+              !Sub ${CodeBuildArtifactStoreBucket.Arn}/*
             Condition:
               StringNotEquals:
                 "s3:x-amz-server-side-encryption": "aws:kms"
@@ -31,7 +31,7 @@ Resources:
             Principal: "*"
             Action: s3:*
             Resource:
-              !Sub ${CodePipelineArtifactStoreBucket.Arn}/*
+              !Sub ${CodeBuildArtifactStoreBucket.Arn}/*
             Condition:
               Bool:
                 "aws:SecureTransport": false

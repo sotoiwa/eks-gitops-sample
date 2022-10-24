@@ -1,3 +1,0 @@
-resources:
-- k8spspprivileged.yaml
-- psp-privileged-container.yaml

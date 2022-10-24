@@ -4,21 +4,21 @@ kind: ClusterConfig
 metadata:
   name: staging
   region: ap-northeast-1
-  version: "1.20"
+  version: "1.23"
 
 vpc:
-  id: vpc-0be6ec61c0615640f
+  id: vpc-06ca05f948c53c581
   subnets:
     public:
       ap-northeast-1a:
-          id: subnet-0082a777db9e2c323
+          id: subnet-00ba83d23f5cac84b
       ap-northeast-1c:
-          id: subnet-0557418851a60ebae
+          id: subnet-027ac364f59b41170
     private:
       ap-northeast-1a:
-          id: subnet-00ae15e7ef85b18f4
+          id: subnet-0732433774c76279a
       ap-northeast-1c:
-          id: subnet-0990c739a11cec49c
+          id: subnet-08460b3c7a1cdcdcc
 
 cloudWatch:
   clusterLogging:

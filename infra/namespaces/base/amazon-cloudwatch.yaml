@@ -5,15 +5,15 @@ metadata:
   labels:
     name: amazon-cloudwatch
 ---
-apiVersion: kubernetes-client.io/v1
-kind: ExternalSecret
-metadata:
-  name: dockerhub
-  namespace: amazon-cloudwatch
-spec:
-  backendType: secretsManager
-  template:
-    type: kubernetes.io/dockerconfigjson
-  data:
-    - key: dockerconfigjson
-      name: .dockerconfigjson
+# apiVersion: kubernetes-client.io/v1
+# kind: ExternalSecret
+# metadata:
+#   name: dockerhub
+#   namespace: amazon-cloudwatch
+# spec:
+#   backendType: secretsManager
+#   template:
+#     type: kubernetes.io/dockerconfigjson
+#   data:
+#     - key: dockerconfigjson
+#       name: .dockerconfigjson

@@ -38,6 +38,7 @@ Resources:
   AmazonCloudWatchEventRule:
     Type: AWS::Events::Rule
     Properties:
+      Name: !Sub ${CodeCommitRepositoryName}-${CodeCommitBranchName}-repository-state-change
       EventPattern:
         source:
           - aws.codecommit
@@ -55,52 +56,8 @@ Resources:
             - !Ref CodeCommitBranchName
       Targets:
         - Arn: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${AppPipeline}
-          RoleArn: !GetAtt
-            - AmazonCloudWatchEventRole
-            - Arn
+          RoleArn: !Sub ${AmazonCloudWatchEventRole.Arn}
           Id: !Sub codepipeline-${AppPipeline}
-  AppPipeline:
-    Type: AWS::CodePipeline::Pipeline
-    Properties:
-      Name: !Sub ${CodeCommitRepositoryName}-${CodeCommitBranchName}-pipeline
-      RoleArn: !GetAtt
-        - CodePipelineServiceRole
-        - Arn
-      ArtifactStore:
-        Type: S3
-        Location: !Ref CodePipelineArtifactStoreBucketName
-      Stages:
-        - Name: Source
-          Actions:
-            - Name: SourceAction
-              ActionTypeId:
-                Category: Source
-                Owner: AWS
-                Version: "1"
-                Provider: CodeCommit
-              OutputArtifacts:
-                - Name: SourceArtifact
-              Configuration:
-                BranchName: !Ref CodeCommitBranchName
-                RepositoryName: !Ref CodeCommitRepositoryName
-                PollForSourceChanges: false
-              RunOrder: 1
-        - Name: Build
-          Actions:
-            - Name: Build
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Version: "1"
-                Provider: CodeBuild
-              InputArtifacts:
-                - Name: SourceArtifact
-              OutputArtifacts:
-                - Name: BuildArtifact
-              Configuration:
-                ProjectName: !Ref CodeBuildProjectName
-                EnvironmentVariables: !Sub "[{\"name\":\"PIPELINE_BRANCH_NAME\",\"value\":\"${CodeCommitBranchName}\",\"type\":\"PLAINTEXT\"}]"
-              RunOrder: 1
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -141,3 +98,43 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::${CodePipelineArtifactStoreBucketName}
                   - !Sub arn:aws:s3:::${CodePipelineArtifactStoreBucketName}/*
+  AppPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${CodeCommitRepositoryName}-${CodeCommitBranchName}-pipeline
+      RoleArn: !Sub ${CodePipelineServiceRole.Arn}
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineArtifactStoreBucketName
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: "1"
+                Provider: CodeCommit
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                BranchName: !Ref CodeCommitBranchName
+                RepositoryName: !Ref CodeCommitRepositoryName
+                PollForSourceChanges: false
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: "1"
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectName
+                EnvironmentVariables: !Sub "[{\"name\":\"PIPELINE_BRANCH_NAME\",\"value\":\"${CodeCommitBranchName}\",\"type\":\"PLAINTEXT\"}]"
+              RunOrder: 1

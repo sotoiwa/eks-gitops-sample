@@ -11,16 +11,6 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: policies
-  namespace: argocd
-spec:
-  source:
-    targetRevision: production
-    path: policies/overlays/production
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
   name: frontend
   namespace: argocd
 spec:
@@ -57,26 +47,6 @@ spec:
   source:
     targetRevision: production
     path: cert-manager/overlays/production
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: calico
-  namespace: argocd
-spec:
-  source:
-    targetRevision: production
-    path: calico/overlays/production
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: gatekeeper
-  namespace: argocd
-spec:
-  source:
-    targetRevision: production
-    path: gatekeeper/overlays/production
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application

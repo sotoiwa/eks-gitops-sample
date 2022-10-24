@@ -1,81 +1,124 @@
-[
-{{- $t_first := true -}}
-{{- range . -}}
-{{- $target := .Target -}}
-{{- range .Vulnerabilities -}}
-{{- if $t_first -}}
-  {{- $t_first = false -}}
-{{- else -}}
-  ,
-{{- end -}}
-{{- $trivyProductSev := 0 -}}
-{{- $trivyNormalizedSev := 0 -}}
-{{- if eq .Severity "LOW" -}}
-    {{- $trivyProductSev = 1 -}}
-    {{- $trivyNormalizedSev = 10 -}}
-  {{- else if eq .Severity "MEDIUM" -}}
-    {{- $trivyProductSev = 4 -}}
-    {{- $trivyNormalizedSev = 40 -}}
-  {{- else if eq .Severity "HIGH" -}}
-    {{- $trivyProductSev = 7 -}}
-    {{- $trivyNormalizedSev = 70 -}}
-  {{- else if eq .Severity "CRITICAL" -}}
-    {{- $trivyProductSev = 9 -}}
-    {{- $trivyNormalizedSev = 90 -}}
-{{- end }}
-{{- $description := .Description -}}
-{{- if gt (len $description ) 1021 -}}
-    {{- $description = (slice $description 0 1021) | printf "%v .." -}}
-{{- end}}
-{{- if eq (len $description ) 0 -}}
-    {{- $description = "No description." -}}
-{{- end}}
-    {
-        "SchemaVersion": "2018-10-08",
-        "Id": "{{ $target }}/{{ .VulnerabilityID }}",
-        "ProductArn": "arn:aws:securityhub:{{ getEnv "AWS_REGION" }}::product/aquasecurity/aquasecurity",
-        "GeneratorId": "Trivy",
-        "AwsAccountId": "{{ getEnv "AWS_ACCOUNT_ID" }}",
-        "Types": [ "Software and Configuration Checks/Vulnerabilities/CVE" ],
-        "CreatedAt": "{{ getCurrentTime }}",
-        "UpdatedAt": "{{ getCurrentTime }}",
-        "Severity": {
-            "Product": {{ $trivyProductSev }},
-            "Normalized": {{ $trivyNormalizedSev }}
-        },
-        "Title": "Trivy found a vulnerability to {{ .VulnerabilityID }} in container {{ $target }}",
-        "Description": {{ escapeString $description | printf "%q" }},
-        "Remediation": {
-            "Recommendation": {
-                "Text": "More information on this vulnerability is provided in the hyperlink",
-                "Url": "{{ .PrimaryURL }}"
-            }
-        },
-        "ProductFields": { "Product Name": "Trivy" },
-        "Resources": [
-            {
-                "Type": "Container",
-                "Id": "{{ $target }}",
-                "Partition": "aws",
-                "Region": "{{ getEnv "AWS_REGION" }}",
-                "Details": {
-                    "Container": { "ImageName": "{{ $target }}" },
-                    "Other": {
-                        "CVE ID": "{{ .VulnerabilityID }}",
-                        "CVE Title": {{ .Title | printf "%q" }},
-                        "PkgName": "{{ .PkgName }}",
-                        "Installed Package": "{{ .InstalledVersion }}",
-                        "Patched Package": "{{ .FixedVersion }}",
-                        "NvdCvssScoreV3": "{{ (index .CVSS "nvd").V3Score }}",
-                        "NvdCvssVectorV3": "{{ (index .CVSS "nvd").V3Vector }}",
-                        "NvdCvssScoreV2": "{{ (index .CVSS "nvd").V2Score }}",
-                        "NvdCvssVectorV2": "{{ (index .CVSS "nvd").V2Vector }}"
+{
+    "Findings": [
+    {{- $t_first := true -}}
+    {{- range . -}}
+    {{- $target := .Target -}}
+    {{- $image := .Target -}}
+    {{- if gt (len $image) 127 -}}
+        {{- $image = $image | regexFind ".{124}$" | printf "...%v" -}}
+    {{- end}}
+    {{- range .Vulnerabilities -}}
+    {{- if $t_first -}}
+      {{- $t_first = false -}}
+    {{- else -}}
+      ,
+    {{- end -}}
+    {{- $severity := .Severity -}}
+    {{- if eq $severity "UNKNOWN" -}}
+    {{- $severity = "INFORMATIONAL" -}}
+    {{- end -}}
+    {{- $description := .Description -}}
+    {{- if gt (len $description ) 512 -}}
+        {{- $description = (substr 0 512 $description) | printf "%v .." -}}
+    {{- end}}
+        {
+            "SchemaVersion": "2018-10-08",
+            "Id": "{{ $target }}/{{ .VulnerabilityID }}",
+            "ProductArn": "arn:aws:securityhub:{{ env "AWS_REGION" }}::product/aquasecurity/aquasecurity",
+            "GeneratorId": "Trivy/{{ .VulnerabilityID }}",
+            "AwsAccountId": "{{ env "AWS_ACCOUNT_ID" }}",
+            "Types": [ "Software and Configuration Checks/Vulnerabilities/CVE" ],
+            "CreatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
+            "UpdatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
+            "Severity": {
+                "Label": "{{ $severity }}"
+            },
+            "Title": "Trivy found a vulnerability to {{ .VulnerabilityID }} in container {{ $target }}",
+            "Description": {{ escapeString $description | printf "%q" }},
+            {{ if not (empty .PrimaryURL) -}}
+            "Remediation": {
+                "Recommendation": {
+                    "Text": "More information on this vulnerability is provided in the hyperlink",
+                    "Url": "{{ .PrimaryURL }}"
+                }
+            },
+            {{ end -}}
+            "ProductFields": { "Product Name": "Trivy" },
+            "Resources": [
+                {
+                    "Type": "Container",
+                    "Id": "{{ $target }}",
+                    "Partition": "aws",
+                    "Region": "{{ env "AWS_REGION" }}",
+                    "Details": {
+                        "Container": { "ImageName": "{{ $image }}" },
+                        "Other": {
+                            "CVE ID": "{{ .VulnerabilityID }}",
+                            "CVE Title": {{ .Title | printf "%q" }},
+                            "PkgName": "{{ .PkgName }}",
+                            "Installed Package": "{{ .InstalledVersion }}",
+                            "Patched Package": "{{ .FixedVersion }}",
+                            "NvdCvssScoreV3": "{{ (index .CVSS (sourceID "nvd")).V3Score }}",
+                            "NvdCvssVectorV3": "{{ (index .CVSS (sourceID "nvd")).V3Vector }}",
+                            "NvdCvssScoreV2": "{{ (index .CVSS (sourceID "nvd")).V2Score }}",
+                            "NvdCvssVectorV2": "{{ (index .CVSS (sourceID "nvd")).V2Vector }}"
+                        }
                     }
                 }
-            }
-        ],
-        "RecordState": "ACTIVE"
-    }
-   {{- end -}}
-  {{- end }}
-]
+            ],
+            "RecordState": "ACTIVE"
+        }
+        {{- end -}}
+        {{- range .Misconfigurations -}}
+            {{- if $t_first -}}{{- $t_first = false -}}{{- else -}},{{- end -}}
+            {{- $severity := .Severity -}}
+            {{- if eq $severity "UNKNOWN" -}}
+                {{- $severity = "INFORMATIONAL" -}}
+            {{- end -}}
+            {{- $description := .Description -}}
+            {{- if gt (len $description ) 512 -}}
+                {{- $description = (substr 0 512 $description) | printf "%v .." -}}
+            {{- end}}
+        {
+            "SchemaVersion": "2018-10-08",
+            "Id": "{{ $target }}/{{ .ID }}",
+            "ProductArn": "arn:aws:securityhub:{{ env "AWS_REGION" }}::product/aquasecurity/aquasecurity",
+            "GeneratorId": "Trivy/{{ .ID }}",
+            "AwsAccountId": "{{ env "AWS_ACCOUNT_ID" }}",
+            "Types": [ "Software and Configuration Checks" ],
+            "CreatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
+            "UpdatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
+            "Severity": {
+                "Label": "{{ $severity }}"
+            },
+            "Title": "Trivy found a misconfiguration in {{ $target }}: {{ .Title }}",
+            "Description": {{ escapeString $description | printf "%q" }},
+            "Remediation": {
+                "Recommendation": {
+                    "Text": "{{ .Resolution }}",
+                    "Url": "{{ .PrimaryURL }}"
+                }
+            },
+            "ProductFields": { "Product Name": "Trivy" },
+            "Resources": [
+                {
+                    "Type": "Other",
+                    "Id": "{{ $target }}",
+                    "Partition": "aws",
+                    "Region": "{{ env "AWS_REGION" }}",
+                    "Details": {
+                        "Other": {
+                            "Message": "{{ .Message }}",
+                            "Filename": "{{ $target }}",
+                            "StartLine": "{{ .CauseMetadata.StartLine }}",
+                            "EndLine": "{{ .CauseMetadata.EndLine }}"
+                        }
+                    }
+                }
+            ],
+            "RecordState": "ACTIVE"
+        }
+        {{- end -}}
+      {{- end }}
+    ]
+}

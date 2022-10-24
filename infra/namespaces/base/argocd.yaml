@@ -3,15 +3,15 @@ kind: Namespace
 metadata:
   name: argocd
 ---
-apiVersion: kubernetes-client.io/v1
-kind: ExternalSecret
-metadata:
-  name: dockerhub
-  namespace: argocd
-spec:
-  backendType: secretsManager
-  template:
-    type: kubernetes.io/dockerconfigjson
-  data:
-    - key: dockerconfigjson
-      name: .dockerconfigjson
+# apiVersion: kubernetes-client.io/v1
+# kind: ExternalSecret
+# metadata:
+#   name: dockerhub
+#   namespace: argocd
+# spec:
+#   backendType: secretsManager
+#   template:
+#     type: kubernetes.io/dockerconfigjson
+#   data:
+#     - key: dockerconfigjson
+#       name: .dockerconfigjson
